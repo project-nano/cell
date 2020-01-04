@@ -2,7 +2,7 @@ package task
 
 import (
 	"github.com/project-nano/framework"
-	"service"
+	"github.com/project-nano/cell/service"
 	"log"
 	"fmt"
 	"errors"
@@ -359,6 +359,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		event.SetString(framework.ParamKeyInstance, config.ID)
 		event.SetUInt(framework.ParamKeyMonitor, config.MonitorPort)
 		event.SetString(framework.ParamKeySecret, config.MonitorSecret)
+		event.SetString(framework.ParamKeyHardware, config.HardwareAddress)
 		if err = executor.Sender.SendMessage(event, request.GetSender()); err != nil {
 			log.Printf("[%08X] warning: notify instance created fail: %s", id, err.Error())
 		}
@@ -446,6 +447,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				created.SetString(framework.ParamKeyInstance, config.ID)
 				created.SetUInt(framework.ParamKeyMonitor, config.MonitorPort)
 				created.SetString(framework.ParamKeySecret, config.MonitorSecret)
+				created.SetString(framework.ParamKeyHardware, config.HardwareAddress)
 
 				if err = executor.Sender.SendMessage(created, request.GetSender()); err != nil {
 					log.Printf("[%08X] warning: notify instance created fail: %s", id, err.Error())

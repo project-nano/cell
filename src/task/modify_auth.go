@@ -1,7 +1,7 @@
 package task
 
 import (
-	"service"
+	"github.com/project-nano/cell/service"
 	"github.com/project-nano/framework"
 	"log"
 	"math/rand"

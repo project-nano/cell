@@ -2,8 +2,8 @@ package main
 
 import (
 	"github.com/project-nano/framework"
-	"service"
-	"task"
+	"github.com/project-nano/cell/service"
+	"github.com/project-nano/cell/task"
 	"net/http"
 	"crypto/tls"
 	"math/rand"

@@ -1,14 +1,14 @@
 package main
 
 import (
+	"github.com/libvirt/libvirt-go"
 	"github.com/project-nano/framework"
 	"log"
-	"service"
-	"github.com/libvirt/libvirt-go"
+	"github.com/project-nano/cell/service"
 )
 
 const (
-	CurrentVersion = "1.0.0"
+	CurrentVersion = "1.1.1"
 )
 
 type CellService struct {

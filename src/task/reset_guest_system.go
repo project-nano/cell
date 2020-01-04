@@ -2,7 +2,7 @@ package task
 
 import (
 	"github.com/project-nano/framework"
-	"service"
+	"github.com/project-nano/cell/service"
 	"log"
 	"fmt"
 	"time"

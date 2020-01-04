@@ -12,7 +12,7 @@ import (
 	"log"
 	"os/exec"
 	"net"
-	"service"
+	"github.com/project-nano/cell/service"
 	"github.com/vishvananda/netlink"
 	"bufio"
 	"strings"

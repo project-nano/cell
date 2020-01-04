@@ -3,7 +3,7 @@ package task
 import (
 	"github.com/project-nano/framework"
 	"log"
-	"service"
+	"github.com/project-nano/cell/service"
 )
 
 type ModifyGuestCoreExecutor struct {

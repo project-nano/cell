@@ -286,7 +286,7 @@ func (handler *DHCPHandler) ServeDHCP(req dhcp4.Packet, msgType dhcp4.MessageTyp
 			//check request server
 			var serverIP = net.IP(requestServer)
 			if !serverIP.Equal(handler.serverIP){
-				log.Printf("<dhcp> ignore request for diffrent server '%s'", serverIP.String())
+				//log.Printf("<dhcp> ignore request for different server '%s'", serverIP.String())
 				return
 			}
 		}
@@ -310,7 +310,7 @@ func (handler *DHCPHandler) ServeDHCP(req dhcp4.Packet, msgType dhcp4.MessageTyp
 		handler.operates <- dhcpOperate{Type:opDeallocate, MAC:macAddress}
 		return
 	default:
-		log.Printf("<dhcp> ignore message type %d from %s", msgType, req.CHAddr().String())
+		//log.Printf("<dhcp> ignore message type %d from %s", msgType, req.CHAddr().String())
 	}
 	return
 }

@@ -185,7 +185,7 @@ func (scheduler *IOScheduler) handleTask(task scheduleTask) {
 func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, volume, path, image, host string, port uint) (err error) {
 	const (
 		Protocol       = "https"
-		Resource       = "disk_image_files"
+		Resource       = "disk_images"
 		FieldName      = "image"
 		CheckSumField  = "checksum"
 		ChunkSize      = 1 << 10
@@ -196,7 +196,8 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
-	var url = fmt.Sprintf("%s://%s:%d/%s/%s", Protocol, host, port, Resource, image)
+	var url = fmt.Sprintf("%s://%s:%d%s", Protocol, host, port,
+		scheduler.apiPath(fmt.Sprintf("/%s/%s/file/", Resource, image)))
 	stat, err := os.Stat(path)
 	if err != nil {
 		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
@@ -319,7 +320,7 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volume, path, image string, imageSize, targetSize uint64, host string, port uint) (err error) {
 	const (
 		Protocol       = "https"
-		Resource       = "disk_image_files"
+		Resource       = "disk_images"
 		ChunkSize      = 1 << 10
 		NotifyInterval = 1 * time.Second
 		VolumePerm     = 0666
@@ -329,7 +330,8 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
-	var url = fmt.Sprintf("%s://%s:%d/%s/%s", Protocol, host, port, Resource, image)
+	var url = fmt.Sprintf("%s://%s:%d%s", Protocol, host, port,
+		scheduler.apiPath(fmt.Sprintf("/%s/%s/file/", Resource, image)))
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, VolumePerm)
 	if err != nil {
 		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
@@ -570,4 +572,8 @@ func (scheduler *IOScheduler)generateCheckSum(target string) (sum string, err er
 		scheduler.name, sum, elapsed, bytes)
 	file.Close()
 	return
+}
+
+func (scheduler *IOScheduler) apiPath(path string) string{
+	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/shirou/gopsutil/disk"
 	"github.com/shirou/gopsutil/net"
 	"fmt"
-	"service"
+	"github.com/project-nano/cell/service"
 )
 
 

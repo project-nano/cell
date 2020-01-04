@@ -1,5 +1,26 @@
 # Change Log
 
+## [1.1.1] - 2020-01-01 
+
+### Changed
+
+- Reset system before initialization change from error to a warning
+- Reduce log for DHCP warning
+- Network detect interval change to two minutes after established some IP
+- Add CreateTime/MAC address to instance
+
+## [1.1.0] - 2019-11-07
+
+### Added 
+
+- Add go mod
+
+### Changed
+
+- Call core API via prefix '/api/v1/'
+- Change "/media_image_files/:id" to "/media_images/:id/file/"
+- Change "/disk_image_files/:id" to "/disk_images/:id/file/"
+
 ## [1.0.0] - 2019-7-14
 
 ### Added

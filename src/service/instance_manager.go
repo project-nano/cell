@@ -1,15 +1,15 @@
 package service
 
 import (
-	"github.com/project-nano/framework"
-	"log"
-	"path/filepath"
 	"encoding/json"
-	"io/ioutil"
-	"os"
-	"github.com/libvirt/libvirt-go"
 	"errors"
 	"fmt"
+	"github.com/libvirt/libvirt-go"
+	"github.com/project-nano/framework"
+	"io/ioutil"
+	"log"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -203,7 +203,7 @@ const (
 )
 
 const (
-	MediaImagePath    = "media_image_files"
+	MediaImagePath    = "media_images"
 	SyncInterval      = 2 * time.Second
 	SystemNameLinux   = "linux"
 	SystemNameWindows = "windows"
@@ -369,12 +369,26 @@ func (manager *InstanceManager) syncInstanceStatus() {
 			if status.NetworkAddress == "" {
 				//check network interface
 				var elapsed = int(now.Sub(status.startTime) / SyncInterval)
-				if (NetworkCheckDivider - 1) == elapsed%NetworkCheckDivider {
+				if (NetworkCheckDivider - 1) == elapsed % NetworkCheckDivider {
 					//get ip address
 					ip, err := manager.util.GetIPv4Address(id, status.HardwareAddress)
 					if (err == nil) && (ip != "") {
 						status.NetworkAddress = ip
 						log.Printf("<instance> ip '%s' detected for instance '%s'", ip, status.Name)
+						manager.events <- InstanceStatusChangedEvent{ID: id, Event: AddressChanged, Address: ip, Timestamp: time.Now()}
+					}
+				}
+			}else{
+				//detect interval change to 2 min after established some IP
+				var currentIP = status.NetworkAddress
+				var elapsed = int(now.Sub(status.startTime) / SyncInterval)
+				var prolongedDivider = NetworkCheckDivider * 4 // 30s => 2min
+				if (prolongedDivider - 1) == elapsed % prolongedDivider {
+					//get ip address
+					ip, err := manager.util.GetIPv4Address(id, status.HardwareAddress)
+					if (err == nil) && (ip != currentIP) {
+						status.NetworkAddress = ip
+						log.Printf("<instance> IP of instance '%s' changed from '%s' to '%s'", status.Name, currentIP, ip)
 						manager.events <- InstanceStatusChangedEvent{ID: id, Event: AddressChanged, Address: ip, Timestamp: time.Now()}
 					}
 				}
@@ -842,7 +856,7 @@ func (manager *InstanceManager) handleStartInstanceWithMedia(id string, media In
 		resp <- err
 		return err
 	}
-	var resourceURI = fmt.Sprintf("/%s/%s", MediaImagePath, media.ID)
+	var resourceURI = manager.apiPath(fmt.Sprintf("/%s/%s/file/", MediaImagePath, media.ID))
 	if err := manager.util.StartInstanceWithMedia(id, media.Host, resourceURI, media.Port); err != nil {
 		resp <- err
 		return err
@@ -1119,11 +1133,10 @@ func (manager *InstanceManager) handleResetGuestSystem(guestID string, resp chan
 		return err
 	}
 	if !ins.Initialized{
-		err = fmt.Errorf("guest '%s' not initialized", guestID)
-		resp <- err
-		return err
+		log.Printf("<instance> warning: guest '%s' not initialized before reset", guestID)
+	}else{
+		ins.Initialized = false
 	}
-	ins.Initialized = false
 	manager.instances[guestID] = ins
 	log.Printf("<instance> guest '%s' resetted", guestID)
 	resp <- nil
@@ -1171,7 +1184,7 @@ func (manager *InstanceManager) handleAttachMedia(id string, media InstanceMedia
 		resp <- err
 		return err
 	}
-	var uri = fmt.Sprintf("/%s/%s", MediaImagePath, media.ID)
+	var uri = manager.apiPath(fmt.Sprintf("/%s/%s/file/", MediaImagePath, media.ID))
 	if err = manager.util.InsertMedia(id, media.Host, uri, media.Port); err != nil{
 		resp <- err
 		return err
@@ -1436,7 +1449,7 @@ func (config *GuestConfig) Marshal(message framework.Message) error {
 	message.SetUIntArray(framework.ParamKeyDisk, config.Disks)
 	message.SetString(framework.ParamKeyAddress, config.NetworkAddress)
 	message.SetString(framework.ParamKeyCreate, config.CreateTime)
-
+	message.SetString(framework.ParamKeyHardware, config.HardwareAddress)
 	//QoS
 	message.SetUInt(framework.ParamKeyPriority, uint(config.CPUPriority))
 	message.SetUIntArray(framework.ParamKeyLimit, []uint64{config.ReadSpeed, config.WriteSpeed, config.ReadIOPS,
@@ -1467,4 +1480,8 @@ func (manager *InstanceManager) StartCPUMonitor(status *InstanceStatus) (error) 
 	status.lastCPUCheck = now
 	status.startTime = now
 	return nil
+}
+
+func (manager *InstanceManager) apiPath(path string) string{
+	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
 }

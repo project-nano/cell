@@ -6,8 +6,10 @@ import (
 )
 
 const (
-	ConfigFilePerm = 0600
+	ConfigFilePerm        = 0600
 	DefaultOperateTimeout = 5 * time.Second
+	APIRoot               = "/api"
+	APIVersion            = 1
 )
 
 type InstanceResult struct {

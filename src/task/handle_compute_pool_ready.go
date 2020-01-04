@@ -2,7 +2,7 @@ package task
 
 import (
 	"github.com/project-nano/framework"
-	"service"
+	"github.com/project-nano/cell/service"
 	"log"
 )
 
@@ -112,7 +112,7 @@ func (executor *HandleComputePoolReadyExecutor) Execute(id framework.SessionID, 
 		return executor.Sender.SendMessage(resp, request.GetSender())
 	}
 
-	var names, ids, users, groups, secrets, addresses, systems, createTime, internal, external []string
+	var names, ids, users, groups, secrets, addresses, systems, createTime, internal, external, hardware []string
 	var cores, options, enables, progress, status, monitors, memories, disks, diskCounts, cpuPriorities, ioLimits []uint64
 	for _, config := range allConfig {
 		names = append(names, config.Name)
@@ -150,6 +150,7 @@ func (executor *HandleComputePoolReadyExecutor) Execute(id framework.SessionID, 
 		createTime = append(createTime, config.CreateTime)
 		internal = append(internal, config.InternalAddress)
 		external = append(external, config.ExternalAddress)
+		hardware = append(hardware, config.HardwareAddress)
 		cpuPriorities = append(cpuPriorities, uint64(config.CPUPriority))
 		ioLimits = append(ioLimits, []uint64{config.ReadSpeed, config.WriteSpeed,
 			config.ReadIOPS, config.WriteIOPS, config.ReceiveSpeed, config.SendSpeed}...)
@@ -164,6 +165,7 @@ func (executor *HandleComputePoolReadyExecutor) Execute(id framework.SessionID, 
 	resp.SetStringArray(framework.ParamKeyCreate, createTime)
 	resp.SetStringArray(framework.ParamKeyInternal, internal)
 	resp.SetStringArray(framework.ParamKeyExternal, external)
+	resp.SetStringArray(framework.ParamKeyHardware, hardware)
 	resp.SetUIntArray(framework.ParamKeyCore, cores)
 	resp.SetUIntArray(framework.ParamKeyOption, options)
 	resp.SetUIntArray(framework.ParamKeyEnable, enables)
