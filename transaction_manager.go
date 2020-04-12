@@ -15,8 +15,8 @@ type TransactionManager struct {
 	*framework.TransactionEngine
 }
 
-func CreateTransactionManager(sender framework.MessageSender, iManager *service.InstanceManager,
-	sManager *service.StorageManager, nManager *service.NetworkManager) (manager *TransactionManager, err error) {
+func CreateTransactionManager(sender framework.MessageSender, instanceModule *service.InstanceManager,
+	storageModule *service.StorageManager, networkModule *service.NetworkManager) (manager *TransactionManager, err error) {
 	var engine *framework.TransactionEngine
 	if engine, err = framework.CreateTransactionEngine(); err != nil {
 		return nil, err
@@ -28,139 +28,155 @@ func CreateTransactionManager(sender framework.MessageSender, iManager *service.
 
 	manager = &TransactionManager{engine}
 	if err = manager.RegisterExecutor(framework.GetComputePoolCellRequest,
-		&task.GetCellInfoExecutor{sender, iManager, sManager, nManager}); err != nil{
+		&task.GetCellInfoExecutor{sender, instanceModule, storageModule, networkModule}); err != nil{
 		return nil, err
 	}
 
 	if err = manager.RegisterExecutor(framework.CreateGuestRequest,
-		&task.CreateInstanceExecutor{sender, iManager, sManager, nManager, generator}); err != nil{
+		&task.CreateInstanceExecutor{sender, instanceModule, storageModule, networkModule, generator}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.DeleteGuestRequest,
-		&task.DeleteInstanceExecutor{sender, iManager, sManager, nManager}); err != nil{
+		&task.DeleteInstanceExecutor{sender, instanceModule, storageModule, networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.GetGuestRequest,
-		&task.GetInstanceConfigExecutor{sender, iManager}); err != nil{
+		&task.GetInstanceConfigExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.GetInstanceStatusRequest,
-		&task.GetInstanceStatusExecutor{sender, iManager}); err != nil{
+		&task.GetInstanceStatusExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.StartInstanceRequest,
-		&task.StartInstanceExecutor{sender, iManager}); err != nil{
+		&task.StartInstanceExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.StopInstanceRequest,
-		&task.StopInstanceExecutor{sender, iManager}); err != nil{
+		&task.StopInstanceExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.AttachInstanceRequest,
-		&task.AttachInstanceExecutor{sender, iManager, sManager, nManager}); err != nil{
+		&task.AttachInstanceExecutor{sender, instanceModule, storageModule, networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.DetachInstanceRequest,
-		&task.DetachInstanceExecutor{sender, iManager, sManager, nManager}); err != nil{
+		&task.DetachInstanceExecutor{sender, instanceModule, storageModule, networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ModifyGuestNameRequest,
-		&task.ModifyGuestNameExecutor{sender, iManager}); err != nil{
+		&task.ModifyGuestNameExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ModifyCoreRequest,
-		&task.ModifyGuestCoreExecutor{sender, iManager}); err != nil{
+		&task.ModifyGuestCoreExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ModifyMemoryRequest,
-		&task.ModifyGuestMemoryExecutor{sender, iManager}); err != nil{
+		&task.ModifyGuestMemoryExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 
 	if err = manager.RegisterExecutor(framework.ModifyPriorityRequest,
-		&task.ModifyCPUPriorityExecutor{sender, iManager}); err != nil{
+		&task.ModifyCPUPriorityExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ModifyDiskThresholdRequest,
-		&task.ModifyDiskThresholdExecutor{sender, iManager}); err != nil{
+		&task.ModifyDiskThresholdExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ModifyNetworkThresholdRequest,
-		&task.ModifyNetworkThresholdExecutor{sender, iManager}); err != nil{
+		&task.ModifyNetworkThresholdExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 
 	if err = manager.RegisterExecutor(framework.ModifyAuthRequest,
-		&task.ModifyGuestPasswordExecutor{sender, iManager, generator}); err != nil{
+		&task.ModifyGuestPasswordExecutor{sender, instanceModule, generator}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.GetAuthRequest,
-		&task.GetGuestPasswordExecutor{sender, iManager}); err != nil{
+		&task.GetGuestPasswordExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ResetSystemRequest,
-		&task.ResetGuestSystemExecutor{sender, iManager, sManager}); err != nil{
+		&task.ResetGuestSystemExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.InsertMediaRequest,
-		&task.InsertMediaCoreExecutor{sender, iManager}); err != nil{
+		&task.InsertMediaCoreExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.EjectMediaRequest,
-		&task.EjectMediaCoreExecutor{sender, iManager}); err != nil{
+		&task.EjectMediaCoreExecutor{sender, instanceModule}); err != nil{
 		return nil, err
 	}
 
 	if err = manager.RegisterExecutor(framework.ComputePoolReadyEvent,
-		&task.HandleComputePoolReadyExecutor{sender, iManager, sManager, nManager}); err != nil{
+		&task.HandleComputePoolReadyExecutor{sender, instanceModule, storageModule, networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ComputeCellRemovedEvent,
-		&task.HandleComputeCellRemovedExecutor{sender, iManager, sManager}); err != nil{
+		&task.HandleComputeCellRemovedExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.CreateDiskImageRequest,
-		&task.CreateDiskImageExecutor{sender, iManager, sManager, client}); err != nil{
+		&task.CreateDiskImageExecutor{sender, instanceModule, storageModule, client}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ResizeDiskRequest,
-		&task.ResizeGuestVolumeExecutor{sender, iManager, sManager}); err != nil{
+		&task.ResizeGuestVolumeExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ShrinkDiskRequest,
-		&task.ShrinkGuestVolumeExecutor{sender, iManager, sManager}); err != nil{
+		&task.ShrinkGuestVolumeExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.QuerySnapshotRequest,
-		&task.QuerySnapshotExecutor{sender, sManager}); err != nil{
+		&task.QuerySnapshotExecutor{sender, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.GetSnapshotRequest,
-		&task.GetSnapshotExecutor{sender,  sManager}); err != nil{
+		&task.GetSnapshotExecutor{sender, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.AddressPoolChangedEvent,
-		&task.HandleAddressPoolChangedExecutor{  nManager}); err != nil{
+		&task.HandleAddressPoolChangedExecutor{networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.CreateSnapshotRequest,
-		&task.CreateSnapshotExecutor{sender, iManager, sManager}); err != nil{
+		&task.CreateSnapshotExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.DeleteSnapshotRequest,
-		&task.DeleteSnapshotExecutor{sender, iManager, sManager}); err != nil{
+		&task.DeleteSnapshotExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.RestoreSnapshotRequest,
-		&task.RestoreSnapshotExecutor{sender, iManager, sManager}); err != nil{
+		&task.RestoreSnapshotExecutor{sender, instanceModule, storageModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.ResetSecretRequest,
 		&task.ResetMonitorSecretExecutor{
 			Sender:         sender,
-			InstanceModule: iManager,
+			InstanceModule: instanceModule,
 		}); err != nil{
 		err = fmt.Errorf("register reset monitor secret fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.QueryCellStorageRequest,
+		&task.QueryStoragePathExecutor{
+			Sender:  sender,
+			Storage: storageModule,
+		}); err != nil{
+		err = fmt.Errorf("register query storage paths fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.ModifyCellStorageRequest,
+		&task.ChangeStoragePathExecutor{
+			Sender:  sender,
+			Storage: storageModule,
+		}); err != nil{
+		err = fmt.Errorf("register change storage path fail: %s", err.Error())
 		return
 	}
 	return manager, nil

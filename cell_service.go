@@ -86,6 +86,8 @@ func (cell *CellService) OnMessageReceived(msg framework.Message) {
 	case framework.AttachInstanceRequest:
 	case framework.DetachInstanceRequest:
 	case framework.ResetSecretRequest:
+	case framework.QueryCellStorageRequest:
+	case framework.ModifyCellStorageRequest:
 	case framework.AddressPoolChangedEvent:
 
 	default:
