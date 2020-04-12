@@ -37,6 +37,167 @@ const (
 	PriorityLow
 )
 
+type TemplateOperatingSystem int
+
+const (
+	TemplateOperatingSystemLinux = iota
+	TemplateOperatingSystemWindows
+	TemplateOperatingSystemInvalid
+)
+
+func (value TemplateOperatingSystem) toString() string{
+	switch value{
+	case TemplateOperatingSystemLinux:
+		return SystemNameLinux
+	case TemplateOperatingSystemWindows:
+		return SystemNameWindows
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateDiskDriver int
+
+const (
+	TemplateDiskDriverSCSI = iota
+	TemplateDiskDriverSATA
+	TemplateDiskDriverIDE
+	TemplateDiskDriverInvalid
+)
+
+func (value TemplateDiskDriver) toString() string{
+	switch value{
+	case TemplateDiskDriverSCSI:
+		return DiskBusSCSI
+	case TemplateDiskDriverSATA:
+		return DiskBusSATA
+	case TemplateDiskDriverIDE:
+		return DiskBusIDE
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateNetworkModel int
+
+const (
+	TemplateNetworkModelVirtIO = iota
+	TemplateNetworkModelE1000
+	TemplateNetworkModelRTL18139
+	TemplateNetworkModelInvalid
+)
+
+func (value TemplateNetworkModel) toString() string{
+	switch value{
+	case TemplateNetworkModelVirtIO:
+		return NetworkModelVIRTIO
+	case TemplateNetworkModelE1000:
+		return NetworkModelE1000
+	case TemplateNetworkModelRTL18139:
+		return NetworkModelRTL8139
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateDisplayDriver int
+
+const (
+	TemplateDisplayDriverVGA = iota
+	TemplateDisplayDriverCirrus
+	TemplateDisplayDriverVirtIO
+	TemplateDisplayDriverQXL
+	TemplateDisplayDriverNone
+	TemplateDisplayDriverInvalid
+)
+
+func (value TemplateDisplayDriver) toString() string{
+	switch value{
+	case TemplateDisplayDriverVGA:
+		return DisplayDriverVGA
+	case TemplateDisplayDriverCirrus:
+		return DisplayDriverCirrus
+	case TemplateDisplayDriverVirtIO:
+		return DisplayDriverVirtIO
+	case TemplateDisplayDriverQXL:
+		return DisplayDriverQXL
+	case TemplateDisplayDriverNone:
+		return DisplayDriverNone
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateRemoteControl int
+
+const (
+	TemplateRemoteControlVNC = iota
+	TemplateRemoteControlSPICE
+	TemplateRemoteControlInvalid
+)
+
+func (value TemplateRemoteControl) toString() string{
+	switch value{
+	case TemplateRemoteControlVNC:
+		return RemoteControlVNC
+	case TemplateRemoteControlSPICE:
+		return RemoteControlSPICE
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateUSBModel int
+
+const (
+	TemplateUSBModelNone = iota
+	TemplateUSBModelXHCI
+	TemplateUSBModelInvalid
+)
+
+func (value TemplateUSBModel) toString() string{
+	switch value{
+	case TemplateUSBModelNone:
+		return USBModelNone
+	case TemplateUSBModelXHCI:
+		return USBModelXHCI
+	default:
+		return "invalid"
+	}
+}
+
+type TemplateTabletModel int
+
+const (
+	TemplateTabletModelNone = iota
+	TemplateTabletModelUSB
+	TemplateTabletModelVirtIO
+	TemplateTabletModelInvalid
+)
+
+func (value TemplateTabletModel) toString() string{
+	switch value{
+	case TemplateTabletModelNone:
+		return TabletBusNone
+	case TemplateTabletModelUSB:
+		return TabletBusUSB
+	case TemplateTabletModelVirtIO:
+		return TabletBusVIRTIO
+	default:
+		return "invalid"
+	}
+}
+
+type HardwareTemplate struct {
+	OperatingSystem string `json:"operating_system"`
+	Disk            string `json:"disk"`
+	Network         string `json:"network"`
+	Display         string `json:"display"`
+	Control         string `json:"control"`
+	USB             string `json:"usb,omitempty"`
+	Tablet          string `json:"tablet,omitempty"`
+}
+
 type GuestConfig struct {
 	Name               string              `json:"name"`
 	ID                 string              `json:"id"`
@@ -46,7 +207,7 @@ type GuestConfig struct {
 	Memory             uint                `json:"memory"`
 	Disks              []uint64            `json:"disks"`
 	AutoStart          bool                `json:"auto_start"`
-	System             string              `json:"system"`
+	System             string              `json:"system,omitempty"`
 	MonitorPort        uint                `json:"monitor_port"`
 	MonitorSecret      string              `json:"monitor_secret"`
 	Created            bool                `json:"-"`
@@ -79,6 +240,7 @@ type GuestConfig struct {
 	ReadIOPS           uint64              `json:"read_iops,omitempty"`
 	ReceiveSpeed       uint64              `json:"receive_speed,omitempty"`
 	SendSpeed          uint64              `json:"send_speed,omitempty"`
+	Template           *HardwareTemplate   `json:"template,omitempty"`
 }
 
 type InstanceStatus struct {
@@ -190,8 +352,6 @@ type InstanceStatusChangedEvent struct {
 	Timestamp time.Time
 }
 
-
-
 type StatusChangedEvent int
 
 const (
@@ -226,15 +386,16 @@ const (
 )
 
 type InstanceManager struct {
-	commands       chan instanceCommand
-	dataFile       string
-	instances      map[string]InstanceStatus
-	util           *InstanceUtility
-	storagePool    string
-	storageURL     string
-	events         chan InstanceStatusChangedEvent
-	eventListeners map[string]chan InstanceStatusChangedEvent
-	runner         *framework.SimpleRunner
+	defaultTemplate HardwareTemplate
+	commands        chan instanceCommand
+	dataFile        string
+	instances       map[string]InstanceStatus
+	util            *InstanceUtility
+	storagePool     string
+	storageURL      string
+	events          chan InstanceStatusChangedEvent
+	eventListeners  map[string]chan InstanceStatusChangedEvent
+	runner          *framework.SimpleRunner
 }
 
 func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (*InstanceManager, error) {
@@ -249,6 +410,15 @@ func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (*Instance
 	manager.dataFile = filepath.Join(dataPath, InstanceFilename)
 	manager.instances = map[string]InstanceStatus{}
 	manager.eventListeners = map[string]chan InstanceStatusChangedEvent{}
+	manager.defaultTemplate = HardwareTemplate{
+		OperatingSystem: TemplateOperatingSystem(TemplateOperatingSystemLinux).toString(),
+		Disk:            TemplateDiskDriver(TemplateDiskDriverSCSI).toString(),
+		Network:         TemplateNetworkModel(TemplateNetworkModelVirtIO).toString(),
+		Display:         TemplateDisplayDriver(TemplateDisplayDriverVGA).toString(),
+		Control:         TemplateRemoteControl(TemplateRemoteControlVNC).toString(),
+		USB:             TemplateUSBModel(TemplateUSBModelNone).toString(),
+		Tablet:          TemplateTabletModel(TemplateTabletModelUSB).toString(),
+	}
 	var err error
 	if manager.util, err = CreateInstanceUtility(connect); err != nil {
 		return nil, err
@@ -257,10 +427,6 @@ func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (*Instance
 		return nil, err
 	}
 	return manager, nil
-}
-
-func (manager *InstanceManager) GetSystemTemplate(version string) (template configTemplate, err error){
-	return manager.util.GetSystemTemplate(version)
 }
 
 func (manager *InstanceManager) GetInstanceNetworkResources() (result map[string]InstanceNetworkResource){
@@ -607,18 +773,12 @@ func (manager *InstanceManager) loadConfig() error {
 		}
 		ins.Running = realStatus.Running
 		ins.Created = true
-		if "" == ins.SystemVersion{
-			ins.SystemVersion = SystemVersionGeneral
-		}
-		template, err := manager.util.GetSystemTemplate(ins.SystemVersion)
-		if err != nil{
-			return err
-		}
-		if "" == ins.System {
-			ins.System = template.System
-		}
 		if "" == ins.AuthUser{
-			ins.AuthUser = template.Admin
+			if SystemNameWindows == ins.Template.OperatingSystem{
+				ins.AuthUser = AdminWindows
+			}else{
+				ins.AuthUser = AdminLinux
+			}
 		}
 		if realStatus.Running {
 			realStatus.GuestConfig = ins
@@ -724,15 +884,9 @@ func (manager *InstanceManager) handleCreateInstance(config GuestConfig, resp ch
 		resp <- err
 		return err
 	}
-	if "" == config.System {
-		config.System = SystemNameLinux
-	}
-	if "" == config.AuthUser{
-		if SystemNameWindows == config.System {
-			config.AuthUser = AdminWindows
-		} else {
-			config.AuthUser = AdminLinux
-		}
+	if nil == config.Template{
+		config.Template = &manager.defaultTemplate
+		log.Printf("<instance> using default template for instance '%s'", config.Name)
 	}
 	guest, err := manager.util.CreateInstance(config)
 	if err != nil {
@@ -1312,6 +1466,10 @@ func (manager *InstanceManager) handleAttachInstances(resources map[string]Insta
 			log.Printf("<instance> load config for instance '%s' fail: %s", instanceID, err.Error())
 			respChan <- err
 			return err
+		}
+		if nil == ins.Template{
+			ins.Template = &manager.defaultTemplate
+			log.Printf("<instance> using default template for instance '%s'", ins.Name)
 		}
 		ins.MonitorPort = uint(resource.MonitorPort)
 		if ins.GuestConfig, err = manager.util.CreateInstance(ins.GuestConfig);err != nil{

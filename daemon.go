@@ -1,20 +1,19 @@
 package main
 
 import (
-	"fmt"
-	"github.com/project-nano/framework"
-	"encoding/json"
-	"io/ioutil"
-	"path/filepath"
-	"errors"
-	"os"
-	"github.com/project-nano/sonar"
-	"log"
-	"os/exec"
-	"net"
-	"github.com/project-nano/cell/service"
-	"github.com/vishvananda/netlink"
 	"bufio"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
+	"github.com/project-nano/sonar"
+	"github.com/vishvananda/netlink"
+	"io/ioutil"
+	"net"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 type DomainConfig struct {
@@ -109,35 +108,26 @@ func generateConfigure(workingPath string) (err error){
 func createDaemon(workingPath string) (daemon framework.DaemonizedService, err error){
 	var configPath = filepath.Join(workingPath, ConfigPathName)
 	var configFile = filepath.Join(configPath, DomainConfigFileName)
-	data, err := ioutil.ReadFile(configFile)
-	if err != nil {
+	var data []byte
+	if data, err = ioutil.ReadFile(configFile); err != nil {
+		err = fmt.Errorf("read config fail: %s", err.Error())
 		return
 	}
 	var config DomainConfig
-	err = json.Unmarshal(data, &config)
-	if err != nil {
+	if err = json.Unmarshal(data, &config); err != nil {
+		err = fmt.Errorf("load config fail: %s", err.Error())
 		return
-	}
-	var dataPath = filepath.Join(workingPath, DataPathName)
-	if _, err = os.Stat(dataPath);os.IsNotExist(err){
-		if err = os.Mkdir(dataPath, DefaultPathPerm);err != nil{
-			return
-		}else{
-			log.Printf("data path '%s' created", dataPath)
-		}
 	}
 	var inf *net.Interface
-	inf, err = net.InterfaceByName(service.DefaultBridgeName)
-	if err != nil{
-		return
-	}
-
-	endpoint, err := framework.CreatePeerEndpoint(config.GroupAddress, config.GroupPort, config.Domain)
-	if err != nil {
+	if inf, err = net.InterfaceByName(service.DefaultBridgeName); err != nil{
+		err = fmt.Errorf("get default bridge fail: %s", err.Error())
 		return
 	}
 	var s = MainService{}
-	s.cell = &CellService{EndpointService:endpoint, ConfigPath:configPath, DataPath:dataPath}
+	if s.cell, err = CreateCellService(config, workingPath); err != nil{
+		err = fmt.Errorf("create service fail: %s", err.Error())
+		return
+	}
 	s.cell.RegisterHandler(s.cell)
 	err = s.cell.GenerateName(framework.ServiceTypeCell, inf)
 	return &s, err

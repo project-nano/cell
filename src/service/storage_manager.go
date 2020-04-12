@@ -1,17 +1,17 @@
 package service
 
 import (
-	"github.com/project-nano/framework"
-	"github.com/libvirt/libvirt-go"
-	"log"
-	"path/filepath"
-	"os"
-	"io/ioutil"
 	"encoding/json"
 	"fmt"
-	"time"
-	"os/exec"
+	"github.com/libvirt/libvirt-go"
 	"github.com/pkg/errors"
+	"github.com/project-nano/framework"
+	"io/ioutil"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"time"
 )
 
 type StorageVolume struct {
@@ -42,6 +42,7 @@ type StoragePoolMode uint
 const (
 	StoragePoolModeLocal = iota
 	StoragePoolModeNFS
+	StoragePoolModeInvalid
 )
 
 type storageCommandType int
@@ -58,12 +59,36 @@ const (
 	storageCommandCreateSnapshot
 	storageCommandDeleteSnapshot
 	storageCommandRestoreSnapshot
-	storageCommandUsing
+	storageCommandSwitchStorage
 	storageCommandGetAttachDevice
 	storageCommandDetachStorage
 	storageCommandAttachVolume
 	storageCommandDetachVolume
+	storageCommandQueryStoragePaths
+	storageCommandChangeDefaultStoragePath
+	storageCommandInvalid
 )
+
+var CommandNames = []string{
+	"CreateVolume",
+	"DeleteVolume",
+	"WriteDiskImage",
+	"ReadDiskImage",
+	"ResizeVolume",
+	"ShrinkVolume",
+	"QuerySnapshot",
+	"GetSnapshot",
+	"CreateSnapshot",
+	"DeleteSnapshot",
+	"RestoreSnapshot",
+	"SwitchStorage",
+	"GetAttachDevice",
+	"DetachStorage",
+	"AttachVolume",
+	"DetachVolume",
+	"QueryStoragePaths",
+	"ChangeDefaultStoragePath",
+}
 
 type storageCommand struct {
 	Type          storageCommandType
@@ -124,22 +149,23 @@ type PendingTask struct {
 }
 
 type StorageManager struct {
-	commands         chan storageCommand
-	dataFile         string
-	dataPath         string
-	localVolumesPath string
-	currentPool      string
-	nfsEnabled       bool
-	pools            map[string]ManagedStoragePool
-	schedulers       map[string]*IOScheduler //key = pool name
-	groups           map[string]InstanceVolumeGroup
-	tasks            map[framework.SessionID]PendingTask
-	progressChan     chan SchedulerUpdate
-	scheduleChan     chan SchedulerResult
-	eventChan        chan schedulerEvent
-	utility          *StorageUtility
-	initiatorIP      string
-	runner           *framework.SimpleRunner
+	commands             chan storageCommand
+	dataFile             string
+	currentPool          string
+	nfsEnabled           bool
+	localSystemDiskPaths []string
+	localDataDiskPaths   []string
+	storageMode          StoragePoolMode
+	pools                map[string]ManagedStoragePool
+	schedulers           map[string]*IOScheduler //key = pool name
+	groups               map[string]InstanceVolumeGroup
+	tasks                map[framework.SessionID]PendingTask
+	progressChan         chan SchedulerUpdate
+	scheduleChan         chan SchedulerResult
+	eventChan            chan schedulerEvent
+	utility              *StorageUtility
+	initiatorIP          string
+	runner               *framework.SimpleRunner
 }
 
 const (
@@ -154,21 +180,29 @@ const (
 	StorageProtocolNFS = "nfs"
 )
 
-func CreateStorageManager(dataPath string, connect *libvirt.Connect) (*StorageManager, error) {
+func (c storageCommandType) toString() string {
+	if c >= storageCommandInvalid{
+		return  "invalid"
+	}
+	return CommandNames[c]
+}
+
+func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *StorageManager, err error) {
 	const (
 		StorageFilename       = "storage.data"
 		DefaultQueueSize      = 1 << 10
 	)
-	var manager = StorageManager{}
+	//check const
+	if storageCommandInvalid != len(CommandNames){
+		err = fmt.Errorf("insufficient command names %d/%d", len(CommandNames), storageCommandInvalid)
+		return
+	}
+	manager = &StorageManager{}
 	manager.commands = make(chan storageCommand, DefaultQueueSize)
 	manager.progressChan = make(chan SchedulerUpdate, DefaultQueueSize)
 	manager.scheduleChan = make(chan SchedulerResult, DefaultQueueSize)
 	manager.eventChan = make(chan schedulerEvent, DefaultQueueSize)
 	manager.dataFile = filepath.Join(dataPath, StorageFilename)
-	manager.dataPath = dataPath
-	manager.localVolumesPath = DefaultLocalVolumePath
-
-	var err error
 	manager.initiatorIP, err = GetCurrentIPOfDefaultBridge()
 	if err != nil {
 		log.Printf("<storage> get initiator ip fail: %s", err.Error())
@@ -186,7 +220,11 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (*StorageMa
 	if err = manager.loadConfig(); err != nil {
 		return nil, err
 	}
-	return &manager, nil
+	if err = manager.startAllScheduler(); err != nil{
+		err = fmt.Errorf("start all scheduler fail: %s", err.Error())
+		return
+	}
+	return manager, nil
 }
 
 func (manager *StorageManager) Start() error{
@@ -265,7 +303,7 @@ func (manager *StorageManager) handleCommand(cmd storageCommand) {
 		err = manager.handleDeleteSnapshot(cmd.Instance, cmd.Snapshot, cmd.ErrorChan)
 	case storageCommandRestoreSnapshot:
 		err = manager.handleRestoreSnapshot(cmd.Instance, cmd.Snapshot, cmd.ErrorChan)
-	case storageCommandUsing:
+	case storageCommandSwitchStorage:
 		err = manager.handleUsingStorage(cmd.Pool, cmd.Protocol, cmd.Host, cmd.Target, cmd.ResultChan)
 	case storageCommandGetAttachDevice:
 		err = manager.handleGetAttachDevices(cmd.ResultChan)
@@ -275,16 +313,20 @@ func (manager *StorageManager) handleCommand(cmd storageCommand) {
 		err = manager.handleAttachVolumeGroup(cmd.Groups, cmd.ErrorChan)
 	case storageCommandDetachVolume:
 		err = manager.handleDetachVolumeGroup(cmd.Groups, cmd.ErrorChan)
+	case storageCommandQueryStoragePaths:
+		err = manager.handleQueryStoragePaths(cmd.ResultChan)
+	case storageCommandChangeDefaultStoragePath:
+		err = manager.handleChangeDefaultStoragePath(cmd.Target, cmd.ErrorChan)
 	default:
 		log.Printf("<storage> unsupported command type %d", cmd.Type)
 	}
 	if err != nil {
-		log.Printf("<storage> handle command %d fail: %s", cmd.Type, err.Error())
+		log.Printf("<storage> handle command %s fail: %s", cmd.Type.toString(), err.Error())
 	}
 }
 
 func (manager *StorageManager) UsingStorage(name, protocol, host, target string, respChan chan StorageResult){
-	manager.commands <- storageCommand{Type:storageCommandUsing, Pool:name, Protocol:protocol, Host:host, Target:target, ResultChan:respChan}
+	manager.commands <- storageCommand{Type: storageCommandSwitchStorage, Pool:name, Protocol:protocol, Host:host, Target:target, ResultChan:respChan}
 }
 
 func (manager *StorageManager) DetachStorage(respChan chan error){
@@ -355,10 +397,35 @@ func (manager *StorageManager) DetachVolumeGroup(groups []string, respChan chan 
 	manager.commands <- storageCommand{Type:storageCommandDetachVolume, Groups:groups, ErrorChan:respChan}
 }
 
+func (manager *StorageManager) QueryStoragePaths(respChan chan StorageResult){
+	manager.commands <- storageCommand{Type:storageCommandQueryStoragePaths, ResultChan: respChan}
+}
+
+func (manager *StorageManager) ChangeDefaultStoragePath(target string, respChan chan error){
+	manager.commands <- storageCommand{Type: storageCommandChangeDefaultStoragePath, Target: target, ErrorChan: respChan}
+}
+
 type storageDataConfig struct {
+	Mode        string                         `json:"mode,omitempty"`
+	SystemPaths []string                       `json:"system_paths,omitempty"`
+	DataPaths   []string                       `json:"data_paths,omitempty"`
 	Pools       map[string]ManagedStoragePool  `json:"pools"`
 	Groups      map[string]InstanceVolumeGroup `json:"groups"`
 	CurrentPool string                         `json:"current_pool,omitempty"`
+}
+
+func (manager *StorageManager) generateLocalPoolPath(poolName string) (poolPath string, err error){
+	if StoragePoolModeLocal != manager.storageMode{
+		err = errors.New("must running in local mode")
+		return
+	}
+	if 0 == len(manager.localSystemDiskPaths){
+		err = errors.New("no local path available")
+		return
+	}
+	var currentRoot = manager.localSystemDiskPaths[0]
+	poolPath = filepath.Join(currentRoot, poolName)
+	return
 }
 
 func (manager *StorageManager) saveVolumesMeta(groupName string) (err error){
@@ -400,98 +467,97 @@ func (manager *StorageManager) removeVolumesMeta(groupName string) (err error){
 	return manager.saveConfig()
 }
 
-func (manager *StorageManager) saveConfig() error {
+func (manager *StorageManager) saveConfig() (err error) {
 	var config = storageDataConfig{}
+	config.Mode = manager.storageMode.toString()
+	config.SystemPaths = manager.localSystemDiskPaths
+	config.DataPaths = manager.localDataDiskPaths
 	config.Pools = manager.pools
 	config.Groups = manager.groups
 	config.CurrentPool = manager.currentPool
-	data, err := json.MarshalIndent(config, "", " ")
-	if err != nil {
+	var data []byte
+	if data, err = json.MarshalIndent(config, "", " "); err != nil {
+		err = fmt.Errorf("generate config data fail: %s", err.Error())
 		return err
 	}
 	if err = ioutil.WriteFile(manager.dataFile, data, ConfigFilePerm); err != nil {
+		err = fmt.Errorf("write config fail: %s", err.Error())
 		return err
 	}
 	log.Printf("<storage> %d pools, %d group saved into '%s'", len(manager.pools), len(manager.groups), manager.dataFile)
 	return nil
 }
 
-func (manager *StorageManager) loadConfig() error {
-	if _, err := os.Stat(manager.dataFile); !os.IsNotExist(err){
+func (manager *StorageManager) loadConfig() (err error) {
+	if _, err = os.Stat(manager.dataFile); !os.IsNotExist(err) {
 		//exists
-		data, err := ioutil.ReadFile(manager.dataFile)
-		if err != nil {
-			return err
+		var data []byte
+		if data, err = ioutil.ReadFile(manager.dataFile); err != nil {
+			err = fmt.Errorf("read config fail: %s", err.Error())
+			return
 		}
 		var config storageDataConfig
 		if err = json.Unmarshal(data, &config); err != nil {
+			err = fmt.Errorf("parse config fail: %s", err.Error())
 			return err
 		}
 		if 0 != len(config.Pools) {
-
+			var defaultPool = config.Pools[DefaultLocalPoolName]
+			var defaultPath = filepath.Dir(defaultPool.Target)
+			if "" == config.Mode{
+				manager.storageMode = defaultPool.Mode
+			}else if manager.storageMode, err = storageModeFromString(config.Mode); err != nil{
+				return
+			}
+			if 0 == len(config.SystemPaths){
+				manager.localSystemDiskPaths = []string{defaultPath}
+			}else{
+				manager.localSystemDiskPaths = config.SystemPaths
+			}
+			if 0 == len(config.DataPaths){
+				manager.localDataDiskPaths = []string{defaultPath}
+			}else{
+				manager.localDataDiskPaths = config.DataPaths
+			}
 			manager.pools = config.Pools
 			manager.groups = config.Groups
 			manager.currentPool = config.CurrentPool
-			if "" == manager.currentPool{
+			if "" == manager.currentPool {
 				manager.currentPool = DefaultLocalPoolName
-			}
-			for poolName, pool := range manager.pools {
-				if pool.Mode == StoragePoolModeNFS{
-					mounted, err := manager.utility.IsNFSPoolMounted(poolName)
-					if mounted {
-						pool.Attached = true
-						log.Printf("<storage> nfs pool '%s' mounted", poolName)
-					}else if poolName != manager.currentPool{
-						pool.Attached = false
-						pool.AttachError = err.Error()
-						log.Printf("<storage> warning: check nfs pool '%s' fail: %s", poolName, err.Error())
-					}else{
-						//primary mount fail, must resume before start
-						log.Printf("<storage> warning: primary nfs pool '%s' not mounted, try restart pool...", poolName)
-						if err = manager.utility.StartPool(poolName); err != nil{
-							pool.Attached = false
-							pool.AttachError = err.Error()
-							log.Printf("<storage> warning: restart nfs pool '%s' fail: %s", poolName, err.Error())
-							return err
-						}else{
-							pool.Attached = true
-							log.Printf("<storage> restart nfs pool '%s' success", poolName)
-						}
-					}
-					if !manager.nfsEnabled{
-						manager.nfsEnabled = true
-					}
-				}
-				scheduler, err := CreateScheduler(poolName, manager.progressChan, manager.scheduleChan, manager.eventChan)
-				if err != nil {
-					return err
-				}
-				manager.schedulers[poolName] = scheduler
-				manager.pools[poolName] = pool
 			}
 			log.Printf("<storage> %d pools, %d groups loaded, using pool '%s'", len(config.Pools), len(config.Groups), manager.currentPool)
 			return nil
 		}
 	}
-	log.Printf("<storage> no configure available in '%s'", manager.dataFile)
-	if err := manager.generateDefaultPool(); err != nil {
-		return err
+	//not exists or no pools available
+	if err = manager.generateDefaultConfig(); err != nil {
+		err = fmt.Errorf("generate default config fail: %s", err.Error())
+		return
 	}
 	return manager.saveConfig()
 }
 
-func (manager *StorageManager) generateDefaultPool() (err error) {
+func (manager *StorageManager) generateDefaultConfig() (err error) {
+	manager.storageMode = StoragePoolModeLocal
+	manager.localSystemDiskPaths = []string{DefaultLocalVolumePath}
+	manager.localDataDiskPaths = []string{DefaultLocalVolumePath}
 	var poolName = DefaultLocalPoolName
 	var backingPool StoragePool
 	if manager.utility.HasPool(poolName) {
 		backingPool, err = manager.utility.GetPool(poolName)
 		if err != nil {
+			err = fmt.Errorf("get default pool '%s' fail: %s", poolName, err.Error())
 			return err
 		}
 		log.Printf("<storage> found default storage pool '%s', path '%s'", poolName, backingPool.Target)
 	} else {
-		poolPath := filepath.Join(manager.localVolumesPath, poolName)
+		var poolPath string
+		if poolPath, err = manager.generateLocalPoolPath(poolName); err != nil{
+			err = fmt.Errorf("generate local path fail: %s", err.Error())
+			return
+		}
 		if backingPool, err = manager.utility.CreateLocalPool(poolName, poolPath); err != nil {
+			err = fmt.Errorf("create local pool '%s' fail: %s", poolName, err.Error())
 			return err
 		}
 		log.Printf("<storage> new storage pool '%s' created, path '%s'", poolName, poolPath)
@@ -499,11 +565,47 @@ func (manager *StorageManager) generateDefaultPool() (err error) {
 	var defaultPool = ManagedStoragePool{StoragePool: backingPool, Volumes: map[string]bool{}}
 	manager.pools[defaultPool.Name] = defaultPool
 	manager.currentPool = poolName
-	scheduler, err := CreateScheduler(defaultPool.Name, manager.progressChan, manager.scheduleChan, manager.eventChan)
-	if err != nil {
-		return err
+	return nil
+}
+
+func (manager *StorageManager) startAllScheduler() (err error){
+	for poolName, pool := range manager.pools {
+		if pool.Mode == StoragePoolModeNFS{
+			mounted, err := manager.utility.IsNFSPoolMounted(poolName)
+			if mounted {
+				pool.Attached = true
+				log.Printf("<storage> nfs pool '%s' mounted", poolName)
+			}else if poolName != manager.currentPool{
+				pool.Attached = false
+				pool.AttachError = err.Error()
+				log.Printf("<storage> warning: check nfs pool '%s' fail: %s", poolName, err.Error())
+			}else{
+				//primary mount fail, must resume before start
+				log.Printf("<storage> warning: primary nfs pool '%s' not mounted, try restart pool...", poolName)
+				if err = manager.utility.StartPool(poolName); err != nil{
+					pool.Attached = false
+					pool.AttachError = err.Error()
+					log.Printf("<storage> warning: restart nfs pool '%s' fail: %s", poolName, err.Error())
+					err = fmt.Errorf("start nfs pool '%s' fail: %s", poolName, err.Error())
+					return err
+				}else{
+					pool.Attached = true
+					log.Printf("<storage> restart nfs pool '%s' success", poolName)
+				}
+			}
+			if !manager.nfsEnabled{
+				manager.nfsEnabled = true
+			}
+		}
+		var scheduler *IOScheduler
+
+		if scheduler, err = CreateScheduler(poolName, manager.progressChan, manager.scheduleChan, manager.eventChan); err != nil {
+			err = fmt.Errorf("create sceduler fail: %s", err.Error())
+			return err
+		}
+		manager.schedulers[poolName] = scheduler
+		manager.pools[poolName] = pool
 	}
-	manager.schedulers[defaultPool.Name] = scheduler
 	return nil
 }
 
@@ -1471,7 +1573,7 @@ func (manager *StorageManager) handleRestoreSnapshotCompleted(groupName, snapsho
 		group.Snapshots[snapshotName] = snapshot
 		group.ActiveSnapshot = snapshotName
 		manager.groups[groupName] = group
-		log.Printf("<stoage> snapshot reverted from '%s.%s' to '%s.%s'", groupName, previousName, groupName, snapshotName)
+		log.Printf("<storage> snapshot reverted from '%s.%s' to '%s.%s'", groupName, previousName, groupName, snapshotName)
 		errChan <- nil
 		return manager.saveVolumesMeta(groupName)
 	}
@@ -1502,6 +1604,111 @@ func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshot
 	errChan <- taskError
 	manager.groups[groupName] = group
 	return manager.saveVolumesMeta(groupName)
+}
+
+func (manager *StorageManager) handleQueryStoragePaths(respChan chan StorageResult) (err error){
+	respChan <- StorageResult{
+		StorageMode: manager.storageMode,
+		SystemPaths: manager.localSystemDiskPaths,
+		DataPaths: manager.localDataDiskPaths,
+	}
+	return nil
+}
+
+func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, respChan chan error)(err error){
+	//check system only
+	defer func() {
+		respChan <- err
+	}()
+	if manager.storageMode != StoragePoolModeLocal{
+		err = errors.New("must running in local mode")
+		return
+	}
+	if 0 == len(manager.localSystemDiskPaths){
+		err = errors.New("can not found current system disk path")
+		return
+	}
+	var currentRoot = manager.localSystemDiskPaths[0]
+	if currentRoot == newPath {
+		err = errors.New("no need to change storage path")
+		return
+	}
+	var targets []string
+	for poolName, pool := range manager.pools{
+		if StoragePoolModeLocal != pool.Mode{
+			//ignore none local pool
+			continue
+		}
+		if 0 != len(pool.Volumes){
+			err = fmt.Errorf("%d volumes attached to previous pool", len(poolName))
+			return
+		}
+		var empty, exists bool
+		if empty, err = isPathEmpty(pool.Target); err != nil{
+			err = fmt.Errorf("check pool path fail: %s", err.Error())
+			return
+		}
+		if !empty{
+			err = fmt.Errorf("previous pool path '%s' not empty", pool.Target)
+			return
+		}
+		var scheduler *IOScheduler
+		if scheduler, exists = manager.schedulers[poolName]; !exists{
+			err = fmt.Errorf("can not found scheduler for pool '%s'", poolName)
+			return
+		}else {
+			if err = scheduler.Stop(); err != nil{
+				err = fmt.Errorf("stop previous scheduler of pool '%s' fail: %s", poolName, err.Error())
+				return
+			}
+			log.Printf("<storage> previous scheduler of pool '%s' stopped", poolName)
+		}
+		targets = append(targets, poolName)
+	}
+	for _, poolName := range targets{
+		if err = manager.utility.DeleteLocalPool(poolName); err != nil{
+			err = fmt.Errorf("remove previous pool '%s' fail: %s", poolName, err.Error())
+			return
+		}
+		var poolPath = filepath.Join(newPath, poolName)
+		var storagePool StoragePool
+		if storagePool, err = manager.utility.CreateLocalPool(poolName, poolPath); err != nil{
+			err = fmt.Errorf("create new pool '%s' fail: %s", poolName, err.Error())
+			return
+		}
+		var scheduler *IOScheduler
+		if scheduler, err = CreateScheduler(poolName, manager.progressChan, manager.scheduleChan, manager.eventChan); err != nil {
+			err = fmt.Errorf("create new sceduler fail: %s", err.Error())
+			return
+		}
+		if err = scheduler.Start(); err != nil{
+			err = fmt.Errorf("start new sceduler fail: %s", err.Error())
+			return
+		}
+		manager.schedulers[poolName] = scheduler
+		manager.pools[poolName] = ManagedStoragePool{StoragePool: storagePool, Volumes: map[string]bool{}}
+		log.Printf("<storage> path of local pool '%s' changed to '%s'", poolName, poolPath)
+	}
+	manager.localSystemDiskPaths = []string{newPath}
+	manager.localDataDiskPaths = []string{newPath}
+	log.Printf("<storage> default storage path changed to '%s'", newPath)
+	err = manager.saveConfig()
+	return
+}
+
+func isPathEmpty(root string) (empty bool, err error){
+	empty = true
+	err = filepath.Walk(root, func(current string, info os.FileInfo, pErr error) error {
+		if pErr != nil{
+			return pErr
+		}
+		if current == root{
+			return nil
+		}
+		empty = false
+		return filepath.SkipDir
+	})
+	return
 }
 
 func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath string, err error) {
@@ -1548,4 +1755,27 @@ func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath strin
 	}
 	log.Printf("<storage> cloud init boot image '%s' created", imagePath)
 	return imagePath, nil
+}
+
+func (mode StoragePoolMode) toString() string {
+	switch mode {
+	case StoragePoolModeLocal:
+		return "local"
+	case StoragePoolModeNFS:
+		return "nfs"
+	default:
+		return "invalid"
+	}
+}
+
+func storageModeFromString(value string) (mode StoragePoolMode, err error) {
+	switch value {
+	case "local":
+		mode = StoragePoolModeLocal
+	case "nfs":
+		mode = StoragePoolModeNFS
+	default:
+		err = fmt.Errorf("invalid mode: %s", value)
+	}
+	return
 }

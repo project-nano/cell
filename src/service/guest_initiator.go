@@ -215,19 +215,17 @@ func (handler *NotFoundHandler) ServeHTTP(w http.ResponseWriter, r *http.Request
 }
 
 func (initiator *GuestInitiator)buildInitialConfig(config GuestConfig) (data string, err error) {
-
-	switch config.SystemVersion {
-	case SystemVersionCentOS7:
-		return initiator.buildCentOS7Initialization(config)
-	case SystemVersionCentOS6:
-		return initiator.buildCentOS6Initialization(config)
+	var os = config.Template.OperatingSystem
+	switch os {
+	case SystemNameLinux:
+		return initiator.buildLinuxInitialization(config)
 	default:
-		err = fmt.Errorf("unsupported system version '%s'", config.SystemVersion)
+		err = fmt.Errorf("unsupported oprating system '%s'", os)
 		return "", err
 	}
 }
 
-func (initiator *GuestInitiator)buildCentOS7Initialization(config GuestConfig) (data string, err error) {
+func (initiator *GuestInitiator) buildLinuxInitialization(config GuestConfig) (data string, err error) {
 	const (
 		AdminGroup            = "wheel"
 		StartDeviceCharacter  = 0x61 //'a'
@@ -297,77 +295,6 @@ func (initiator *GuestInitiator)buildCentOS7Initialization(config GuestConfig) (
 	fmt.Fprintf(&builder, "growpart:\n  mode: auto\n  devices: ['%s']\n  ignore_growroot_disabled: false\n", systemDev)
 	fmt.Fprintf(&builder, "runcmd:\n  - [ pvresize, '%s']\n  - [ lvextend, '-l', '+100%%FREE', '%s']\n  - [ xfs_growfs, '%s' ]\n\n",
 		systemDev, RootVolume, RootVolume)
-	return builder.String(), nil
-}
-
-func (initiator *GuestInitiator)buildCentOS6Initialization(config GuestConfig) (data string, err error) {
-	//todo: optimize for centos 6
-	const (
-		AdminGroup            = "wheel"
-		StartDeviceCharacter  = 0x61 //'a'
-		DevicePrefixSCSI      = "sd"
-		VolumeGroupName       = "nano"
-		DataLogicalVolumeName = "data"
-		SystemPartitionIndex  = 2
-		RootVolume            = "/dev/centos/root"
-		SaltLength            = 8
-	)
-	var builder strings.Builder
-	builder.WriteString("#cloud-config\n")
-	if config.RootLoginEnabled{
-		builder.WriteString("disable_root: false\n")
-	}else{
-		builder.WriteString("disable_root: true\n")
-	}
-	var hostname = strings.TrimPrefix(config.Name, fmt.Sprintf("%s.", config.Group))
-	fmt.Fprintf(&builder, "hostname: %s\n", hostname)
-
-	builder.WriteString("ssh_pwauth: yes\n")
-	if config.AuthUser == AdminLinux{
-		//change default password
-		fmt.Fprintf(&builder, "chpasswd:\n  expire: false\n  list: |\n    %s:%s\n\n", config.AuthUser, config.AuthSecret)
-	}else{
-		//new admin
-		var salt = initiator.generateSalt(SaltLength)
-
-		hashed, err := crypt.Crypt(config.AuthSecret, fmt.Sprintf("$6$%s$", salt))
-		if err != nil{
-			return data, err
-		}
-		fmt.Fprintf(&builder, "users:\n  - name: %s\n    passwd: %s\n    lock_passwd: false\n    groups: [ %s ]\n\n", config.AuthUser, hashed, AdminGroup)
-	}
-
-	var mountMap = map[string]string{}
-	var groupDevices []string
-	if len(config.Disks) > 1{
-		builder.WriteString("bootcmd:\n")
-		//data disk available
-		for i, _ := range config.Disks[1:]{
-			var devName = fmt.Sprintf("/dev/%s%c", DevicePrefixSCSI, StartDeviceCharacter + i + 1)//from /dev/sdb
-			groupDevices = append(groupDevices, devName)
-			fmt.Fprintf(&builder, "    - [ pvcreate, %s ]\n", devName)
-		}
-		fmt.Fprintf(&builder, "    - [ vgcreate, %s , %s ]\n", VolumeGroupName, strings.Join(groupDevices, ","))
-		//lvcreate --name data -l 100%FREE data
-		fmt.Fprintf(&builder, "    - [ lvcreate, --name, %s, -l, 100%%FREE, %s ]\n", DataLogicalVolumeName, VolumeGroupName)
-		var dataVolume = fmt.Sprintf("/dev/%s/%s", VolumeGroupName, DataLogicalVolumeName)
-		fmt.Fprintf(&builder, "    - [ mkfs.ext4, %s ]\n\n", dataVolume)
-		if "" == config.DataPath{
-			err = errors.New("must specify mount data path in guest")
-			return
-		}
-		mountMap[dataVolume] = config.DataPath
-	}
-	if 0 != len(mountMap){
-		builder.WriteString("mounts:\n")
-		for dev, path := range mountMap{
-			fmt.Fprintf(&builder, "    - [ %s, %s ]\n", dev, path)
-		}
-		builder.WriteString("\n")
-	}
-	var systemDev = fmt.Sprintf("/dev/%s%c%d", DevicePrefixSCSI, StartDeviceCharacter, SystemPartitionIndex) // /dev/sda2
-	fmt.Fprintf(&builder, "growpart:\n  mode: auto\n  devices: ['%s']\n  ignore_growroot_disabled: false\n", systemDev)
-	fmt.Fprintf(&builder, "runcmd:\n  - [ pvresize, '%s']\n  - [ lvextend, '-l', '+100%%FREE', '%s']\n  - [ xfs_growfs, '%s' ]\n\n", systemDev, RootVolume, RootVolume)
 	return builder.String(), nil
 }
 

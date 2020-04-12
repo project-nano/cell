@@ -1,11 +1,11 @@
 package service
 
 import (
-	"github.com/libvirt/libvirt-go"
-	"fmt"
-	"encoding/xml"
 	"crypto/rand"
+	"encoding/xml"
 	"errors"
+	"fmt"
+	"github.com/libvirt/libvirt-go"
 	"strings"
 )
 
@@ -105,6 +105,19 @@ type virDomainInput struct {
 	Bus  string `xml:"bus,attr"`
 }
 
+type virVideoModel struct {
+	Type string `xml:"type,attr"`
+}
+
+type virVideoDriver struct {
+	Name string `xml:"name,attr"`
+}
+
+type virVideoElement struct {
+	Model  virVideoModel  `xml:"model"`
+	Driver virVideoDriver `xml:"driver"`
+}
+
 type virDomainDevicesElement struct {
 	Emulator      string                       `xml:"emulator"`
 	Disks         []virDomainDiskElement       `xml:"disk,omitempty"`
@@ -114,6 +127,7 @@ type virDomainDevicesElement struct {
 	Input         []virDomainInput             `xml:"input,omitempty"`
 	MemoryBalloon virDomainMemoryBalloon       `xml:"memballoon"`
 	Channel       virDomainChannel             `xml:"channel"`
+	Video         virVideoElement              `xml:"video"`
 }
 
 type virDomainCpuElement struct {
@@ -245,31 +259,38 @@ const (
 )
 
 const (
-	DiskTypeNetwork      = "network"
-	DiskTypeBlock        = "block"
-	DiskTypeFile         = "file"
-	DiskTypeVolume       = "volume"
-	DeviceCDROM          = "cdrom"
-	DeviceDisk           = "disk"
-	DriverNameQEMU       = "qemu"
-	DriverTypeRaw        = "raw"
-	DriverTypeQCOW2      = "qcow2"
-	StartDeviceCharacter = 0x61 //'a'
-	DevicePrefixIDE      = "hd"
-	DevicePrefixSCSI     = "sd"
-	DiskBusIDE           = "ide"
-	DiskBusSCSI          = "scsi"
-	DiskBusSATA          = "sata"
-	ProtocolHTTPS        = "https"
-	NetworkModelRTL8139  = "rtl8139"
-	NetworkModelE1000    = "e1000"
-	NetworkModelVIRTIO   = "virtio"
-	USBModelXHCI         = "nec-xhci"
-	USBModelDefault      = ""
-	TabletBusVIRTIO      = "virtio"
-	TabletBusUSB         = "usb"
-	InputTablet          = "tablet"
-
+	DiskTypeNetwork        = "network"
+	DiskTypeBlock          = "block"
+	DiskTypeFile           = "file"
+	DiskTypeVolume         = "volume"
+	DeviceCDROM            = "cdrom"
+	DeviceDisk             = "disk"
+	DriverNameQEMU         = "qemu"
+	DriverTypeRaw          = "raw"
+	DriverTypeQCOW2        = "qcow2"
+	StartDeviceCharacter   = 0x61 //'a'
+	DevicePrefixIDE        = "hd"
+	DevicePrefixSCSI       = "sd"
+	DiskBusIDE             = "ide"
+	DiskBusSCSI            = "scsi"
+	DiskBusSATA            = "sata"
+	ProtocolHTTPS          = "https"
+	NetworkModelRTL8139    = "rtl8139"
+	NetworkModelE1000      = "e1000"
+	NetworkModelVIRTIO     = "virtio"
+	DisplayDriverVGA       = "vga"
+	DisplayDriverCirrus    = "cirrus"
+	DisplayDriverQXL       = "qxl"
+	DisplayDriverVirtIO    = "virtio"
+	DisplayDriverNone      = "none"
+	RemoteControlVNC       = "vnc"
+	RemoteControlSPICE     = "spice"
+	USBModelXHCI           = "nec-xhci"
+	USBModelNone           = ""
+	TabletBusNone          = ""
+	TabletBusVIRTIO        = "virtio"
+	TabletBusUSB           = "usb"
+	InputTablet            = "tablet"
 	PCIController          = "pci"
 	DefaultControllerIndex = "0"
 	DefaultControllerModel = "pci-root"
@@ -280,29 +301,12 @@ const (
 
 type InstanceUtility struct {
 	virConnect      *libvirt.Connect
-	systemTemplates map[string]configTemplate
 }
 
 func CreateInstanceUtility(connect *libvirt.Connect) (util *InstanceUtility, err error) {
 	util = &InstanceUtility{}
 	util.virConnect = connect
-	util.systemTemplates = map[string]configTemplate{
-		SystemVersionCentOS7:    configTemplate{SystemNameLinux, AdminLinux, DiskBusSCSI, NetworkModelVIRTIO, USBModelXHCI, TabletBusUSB},
-		SystemVersionCentOS6:    configTemplate{SystemNameLinux, AdminLinux, DiskBusSATA, NetworkModelVIRTIO, USBModelXHCI, TabletBusUSB},
-		SystemVersionWindow2012: configTemplate{SystemNameWindows, AdminWindows, DiskBusSATA, NetworkModelE1000, USBModelXHCI, TabletBusUSB},
-		SystemVersionGeneral:    configTemplate{SystemNameLinux, AdminLinux, DiskBusSATA, NetworkModelRTL8139, USBModelDefault, TabletBusUSB},
-		SystemVersionLegacy:     configTemplate{SystemNameLinux, AdminLinux, DiskBusIDE, NetworkModelRTL8139, USBModelDefault, TabletBusUSB},
-	}
 	return util, nil
-}
-
-func (util *InstanceUtility) GetSystemTemplate(version string) (template configTemplate, err error){
-	template, exists := util.systemTemplates[version]
-	if !exists{
-		err = fmt.Errorf("unsupport system version '%s'", version)
-		return
-	}
-	return template, nil
 }
 
 func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConfig, err error) {
@@ -980,28 +984,23 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 	define.Memory = config.Memory >> 10
 	define.VCpu = config.Cores
 
-
 	//cpu
 	if err = setCPUPriority(&define, config.CPUPriority); err != nil{
+		err = fmt.Errorf("set CPU prioirity fail: %s", err.Error())
 		return
 	}
-
 	if err = define.CPU.Topology.SetCpuTopology(config.Cores); err != nil {
+		err = fmt.Errorf("set CPU topology fail: %s", err.Error())
 		return
 	}
-	//os & boot
-	template, err := util.GetSystemTemplate(config.SystemVersion)
-	if err != nil{
-		return
-	}
-
-
 	define.OS.BootOrder = []virDomainBootDevice{virDomainBootDevice{BootDeviceCDROM}, virDomainBootDevice{BootDeviceHardDisk}}
+	define.SetVideoDriver(config.Template.Display)
 
 	switch config.StorageMode {
 	case StorageModeLocal:
-		if err = define.SetLocalVolumes(template.DiskBus, config.StoragePool, config.StorageVolumes, config.BootImage,
+		if err = define.SetLocalVolumes(config.Template.Disk, config.StoragePool, config.StorageVolumes, config.BootImage,
 			config.ReadSpeed, config.ReadIOPS, config.WriteSpeed, config.WriteIOPS); err != nil {
+			err = fmt.Errorf("set local volumes fail: %s", err.Error())
 			return
 		}
 	default:
@@ -1010,23 +1009,25 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 	}
 	switch config.NetworkMode {
 	case NetworkModePlain:
-		if err = define.SetPlainNetwork(template.NetworkModel, config.NetworkSource, config.HardwareAddress, config.ReceiveSpeed, config.SendSpeed); err != nil {
+		if err = define.SetPlainNetwork(config.Template.Network, config.NetworkSource, config.HardwareAddress, config.ReceiveSpeed, config.SendSpeed); err != nil {
+			err = fmt.Errorf("set plain network fail: %s", err.Error())
 			return
 		}
 	default:
 		err = fmt.Errorf("unsupported network mode :%d", config.NetworkMode)
 		return
 	}
-	if err = define.SetVncDisplay(config.MonitorPort, config.MonitorSecret); err != nil {
+	if err = define.SetRemoteControl(config.Template.Display, config.MonitorPort, config.MonitorSecret); err != nil {
+		err = fmt.Errorf("set remote control fail: %s", err.Error())
 		return
 	}
 	//tablet
-	define.Devices.Input = append(define.Devices.Input, virDomainInput{InputTablet, template.TabletBus})
-	if template.USBModel != USBModelDefault{
-		define.Devices.Controller = append(define.Devices.Controller, virDomainControllerElement{USBController, DefaultControllerIndex, template.USBModel})
+	if config.Template.Tablet != TabletBusNone{
+		define.Devices.Input = append(define.Devices.Input, virDomainInput{InputTablet, config.Template.Tablet})
 	}
-	//qos
-
+	if config.Template.USB != USBModelNone {
+		define.Devices.Controller = append(define.Devices.Controller, virDomainControllerElement{USBController, DefaultControllerIndex, config.Template.USB})
+	}
 	return
 }
 
@@ -1065,6 +1066,10 @@ func (topology *virDomainCpuTopology) SetCpuTopology(totalThreads uint) error {
 	topology.Cores = cores
 	topology.Sockets = sockets
 	return nil
+}
+
+func (define *virDomainDefine) SetVideoDriver(model string) {
+	define.Devices.Video.Model.Type = model
 }
 
 func (define *virDomainDefine) SetLocalVolumes(diskBus, pool string, volumes []string, bootImage string,
@@ -1171,15 +1176,13 @@ func (define *virDomainDefine) generateMacAddress() (string, error) {
 	return fmt.Sprintf("%s:%02x:%02x:%02x", MacPrefix, buf[0], buf[1], buf[2]), nil
 }
 
-func (define *virDomainDefine) SetVncDisplay(port uint, secret string) error {
+func (define *virDomainDefine) SetRemoteControl(display string, port uint, secret string) error {
 	const (
-		GraphicVNC = "vnc"
-		//GraphicSPICE = "spice"
 		ListenAllAddress  = "0.0.0.0"
 		ListenTypeAddress = "address"
 	)
 	define.Devices.Graphics.Port = port
-	define.Devices.Graphics.Type = GraphicVNC
+	define.Devices.Graphics.Type = display
 	define.Devices.Graphics.Password = secret
 	define.Devices.Graphics.Listen = &virDomainGraphicsListen{ListenTypeAddress, ListenAllAddress}
 	return nil

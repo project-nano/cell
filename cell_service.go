@@ -1,10 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"github.com/libvirt/libvirt-go"
 	"github.com/project-nano/framework"
 	"log"
 	"github.com/project-nano/cell/service"
+	"os"
+	"path/filepath"
 )
 
 const (
@@ -13,7 +16,6 @@ const (
 
 type CellService struct {
 	framework.EndpointService
-	ConfigPath     string
 	DataPath       string
 	collector      *CollectorModule
 	insManager     *service.InstanceManager
@@ -23,6 +25,25 @@ type CellService struct {
 	virConnect     *libvirt.Connect
 	initiator      *service.GuestInitiator
 	dhcpService    *service.DHCPService
+}
+
+func CreateCellService(config DomainConfig, workingPath string) (service *CellService, err error){
+	var dataPath = filepath.Join(workingPath, DataPathName)
+	if _, err = os.Stat(dataPath);os.IsNotExist(err){
+		if err = os.Mkdir(dataPath, DefaultPathPerm);err != nil{
+			err = fmt.Errorf("create data path '%s' fail: %s", dataPath, err.Error())
+			return
+		}else{
+			log.Printf("data path '%s' created", dataPath)
+		}
+	}
+	service = &CellService{}
+	service.DataPath = dataPath
+	if service.EndpointService, err = framework.CreatePeerEndpoint(config.GroupAddress, config.GroupPort, config.Domain); err != nil{
+		err = fmt.Errorf("create new endpoint fail: %s", err.Error())
+		return
+	}
+	return service, nil
 }
 
 func (cell *CellService) OnMessageReceived(msg framework.Message) {

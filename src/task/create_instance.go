@@ -50,9 +50,23 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	if config.AutoStart, err = request.GetBoolean(framework.ParamKeyOption); err != nil {
 		return err
 	}
-	config.System, _ = request.GetString(framework.ParamKeySystem)
-	config.SystemVersion, _ = request.GetString(framework.ParamKeyVersion)
-	config.AuthUser, _ = request.GetString(framework.ParamKeyAdmin)
+	//config.System, _ = request.GetString(framework.ParamKeySystem)
+	//config.SystemVersion, _ = request.GetString(framework.ParamKeyVersion)
+	if config.AuthUser, err = request.GetString(framework.ParamKeyAdmin); err != nil{
+		err = fmt.Errorf("get admin name fail: %s", err.Error())
+		return
+	}
+	var templateOptions []uint64
+	if templateOptions, err = request.GetUIntArray(framework.ParamKeyTemplate); err != nil{
+		err = fmt.Errorf("get template fail: %s", err.Error())
+		return
+	}else{
+		const ValidOptionCount = 7
+		if ValidOptionCount != len(templateOptions){
+			err = fmt.Errorf("template options count mismatch %d / %d", len(templateOptions), ValidOptionCount)
+			return
+		}
+	}
 
 	if modeArray, err := request.GetUIntArray(framework.ParamKeyMode); err != nil {
 		return err
@@ -146,31 +160,11 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	log.Printf("[%08X] network mode %d, storage mode %d, auto start : %t", id,
 		config.NetworkMode, config.StorageMode, config.AutoStart)
 
-
 	resp, _ := framework.CreateJsonMessage(framework.CreateGuestResponse)
 	resp.SetFromSession(id)
 	resp.SetToSession(request.GetFromSession())
 	resp.SetSuccess(false)
-
-	{
-		//fulfill system info
-		if "" == config.SystemVersion{
-			config.SystemVersion = service.SystemVersionGeneral
-		}
-		template, err := executor.InstanceModule.GetSystemTemplate(config.SystemVersion)
-		if err != nil{
-			resp.SetError(err.Error())
-			log.Printf("[%08X] get support system fail: %s", id, err.Error())
-			return executor.Sender.SendMessage(resp, request.GetSender())
-		}
-		if "" == config.System{
-			config.System = template.System
-		}
-		if "" == config.AuthUser{
-			config.AuthUser = template.Admin
-		}
-		log.Printf("[%08X] guest system '%s'(%s), admin name '%s'", id, config.SystemVersion, config.System, config.AuthUser)
-	}
+	log.Printf("[%08X] operating system type: %s, admin name '%s'", id, config.Template.OperatingSystem, config.AuthUser)
 
 	{
 		//check modules & ci params

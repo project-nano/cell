@@ -395,6 +395,20 @@ func (util *StorageUtility) CreateLocalPool(name, path string) (pool StoragePool
 	return pool, err
 }
 
+func (util *StorageUtility) DeleteLocalPool(poolName string) (err error){
+	var pool StoragePool
+	if pool, err = util.GetPool(poolName); err != nil{
+		err = fmt.Errorf("invalid local pool: %s", err.Error())
+		return
+	}
+	if err = util.deletePool(poolName); err != nil{
+		err = fmt.Errorf("delete pool fail: %s", err.Error())
+		return
+	}
+	err = os.RemoveAll(pool.Target)
+	return
+}
+
 func (util *StorageUtility) StartPool(name string) (error) {
 	virPool, err := util.innerConnect.LookupStoragePoolByName(name)
 	if err != nil{

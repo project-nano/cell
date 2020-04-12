@@ -35,7 +35,6 @@ const (
 )
 
 type InstanceModule interface {
-	GetSystemTemplate(version string) (template configTemplate, err error)
 	UsingStorage(name, url string, respChan chan error)
 	DetachStorage(respChan chan error)
 	CreateInstance(require GuestConfig, resp chan error)
@@ -99,6 +98,9 @@ type StorageResult struct {
 	Snapshot     SnapshotConfig
 	SnapshotList []SnapshotConfig
 	Devices      []AttachDeviceInfo
+	StorageMode  StoragePoolMode
+	SystemPaths  []string
+	DataPaths    []string
 }
 
 type BootType int
@@ -128,6 +130,8 @@ type StorageModule interface {
 	RestoreSnapshot(groupName, snapshot string, respChan chan error)
 	AttachVolumeGroup(groups []string, respChan chan error)
 	DetachVolumeGroup(groups []string, respChan chan error)
+	QueryStoragePaths(respChan chan StorageResult)
+	ChangeDefaultStoragePath(target string, respChan chan error)
 }
 
 type NetworkResult struct {
