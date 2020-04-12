@@ -68,6 +68,7 @@ type InstanceModule interface {
 	AttachInstances(resources map[string]InstanceNetworkResource, respChan chan error)
 	DetachInstances(instances []string, respChan chan error)
 	MigrateInstances(instances []string, respChan chan error)
+	ResetMonitorPassword(id string, respChan chan InstanceResult)
 }
 
 type SnapshotConfig struct {

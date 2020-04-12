@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	CurrentVersion = "1.1.1"
+	CurrentVersion = "1.2.0"
 )
 
 type CellService struct {
@@ -85,6 +85,7 @@ func (cell *CellService) OnMessageReceived(msg framework.Message) {
 	case framework.ComputeCellRemovedEvent:
 	case framework.AttachInstanceRequest:
 	case framework.DetachInstanceRequest:
+	case framework.ResetSecretRequest:
 	case framework.AddressPoolChangedEvent:
 
 	default:

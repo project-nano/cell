@@ -1,12 +1,13 @@
 package main
 
 import (
-	"github.com/project-nano/framework"
+	"crypto/tls"
+	"fmt"
 	"github.com/project-nano/cell/service"
 	"github.com/project-nano/cell/task"
-	"net/http"
-	"crypto/tls"
+	"github.com/project-nano/framework"
 	"math/rand"
+	"net/http"
 	"time"
 )
 
@@ -15,9 +16,9 @@ type TransactionManager struct {
 }
 
 func CreateTransactionManager(sender framework.MessageSender, iManager *service.InstanceManager,
-	sManager *service.StorageManager, nManager *service.NetworkManager) (*TransactionManager, error) {
-	engine, err := framework.CreateTransactionEngine()
-	if err != nil {
+	sManager *service.StorageManager, nManager *service.NetworkManager) (manager *TransactionManager, err error) {
+	var engine *framework.TransactionEngine
+	if engine, err = framework.CreateTransactionEngine(); err != nil {
 		return nil, err
 	}
 	client := &http.Client{
@@ -25,7 +26,7 @@ func CreateTransactionManager(sender framework.MessageSender, iManager *service.
 	}
 	generator := rand.New(rand.NewSource(time.Now().UnixNano()))
 
-	var manager = TransactionManager{engine}
+	manager = &TransactionManager{engine}
 	if err = manager.RegisterExecutor(framework.GetComputePoolCellRequest,
 		&task.GetCellInfoExecutor{sender, iManager, sManager, nManager}); err != nil{
 		return nil, err
@@ -154,5 +155,13 @@ func CreateTransactionManager(sender framework.MessageSender, iManager *service.
 		&task.RestoreSnapshotExecutor{sender, iManager, sManager}); err != nil{
 		return nil, err
 	}
-	return &manager, nil
+	if err = manager.RegisterExecutor(framework.ResetSecretRequest,
+		&task.ResetMonitorSecretExecutor{
+			Sender:         sender,
+			InstanceModule: iManager,
+		}); err != nil{
+		err = fmt.Errorf("register reset monitor secret fail: %s", err.Error())
+		return
+	}
+	return manager, nil
 }

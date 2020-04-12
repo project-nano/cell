@@ -242,16 +242,6 @@ type virDomainDefine struct {
 	Features    virDomainFeatureElement `xml:"features,omitempty"`
 	Clock       virDomainClockElement   `xml:"clock"`
 }
-
-type configTemplate struct {
-	System       string
-	Admin        string
-	DiskBus      string
-	NetworkModel string
-	USBModel     string
-	TabletBus    string
-}
-
 const (
 	IDEOffsetCDROM      = iota
 	IDEOffsetCIDATA
@@ -297,6 +287,8 @@ const (
 	VirtioSCSIController   = "scsi"
 	VirtioSCSIModel        = "virtio-scsi"
 	USBController          = "usb"
+	ListenAllAddress       = "0.0.0.0"
+	ListenTypeAddress      = "address"
 )
 
 type InstanceUtility struct {
@@ -973,6 +965,38 @@ func (util *InstanceUtility) Rename(uuid, newName string) (err error){
 	return virDomain.Rename(newName, 0)
 }
 
+func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, port uint, secret string) (err error){
+	var virDomain *libvirt.Domain
+	if virDomain, err = util.virConnect.LookupDomainByUUIDString(uuid); err != nil {
+		err = fmt.Errorf("invalid guest '%s'", uuid)
+		return err
+	}
+	var isRunning bool
+	if isRunning, err = virDomain.IsActive();err != nil {
+		err = fmt.Errorf("check running status fail: %s", err.Error())
+		return err
+	}
+	if isRunning {
+		return fmt.Errorf("instance '%s' is still running", uuid)
+	}
+	var graphics = virDomainGraphicsElement{
+		Type:     display,
+		Port:     port,
+		Password: secret,
+		Listen:   &virDomainGraphicsListen{ListenTypeAddress, ListenAllAddress},
+	}
+	var payload []byte
+	if payload, err = xml.Marshal(graphics); err != nil{
+		err = fmt.Errorf("generate graphic element fail: %s", err.Error())
+		return
+	}
+	if err = virDomain.UpdateDeviceFlags(string(payload), libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil{
+		err = fmt.Errorf("update graphic element fail: %s", err.Error())
+		return
+	}
+	return nil
+}
+
 func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainDefine, err error) {
 	const (
 		BootDeviceCDROM    = "cdrom"
@@ -1177,10 +1201,6 @@ func (define *virDomainDefine) generateMacAddress() (string, error) {
 }
 
 func (define *virDomainDefine) SetRemoteControl(display string, port uint, secret string) error {
-	const (
-		ListenAllAddress  = "0.0.0.0"
-		ListenTypeAddress = "address"
-	)
 	define.Devices.Graphics.Port = port
 	define.Devices.Graphics.Type = display
 	define.Devices.Graphics.Password = secret
@@ -1240,4 +1260,3 @@ func (define *virDomainDefine) Initial() {
 		virDomainControllerElement{Type: VirtioSCSIController, Index: DefaultControllerIndex, Model: VirtioSCSIModel}}
 
 }
-

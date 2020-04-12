@@ -8,6 +8,7 @@ import (
 	"github.com/project-nano/framework"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
@@ -45,7 +46,7 @@ const (
 	TemplateOperatingSystemInvalid
 )
 
-func (value TemplateOperatingSystem) toString() string{
+func (value TemplateOperatingSystem) ToString() string{
 	switch value{
 	case TemplateOperatingSystemLinux:
 		return SystemNameLinux
@@ -65,7 +66,7 @@ const (
 	TemplateDiskDriverInvalid
 )
 
-func (value TemplateDiskDriver) toString() string{
+func (value TemplateDiskDriver) ToString() string{
 	switch value{
 	case TemplateDiskDriverSCSI:
 		return DiskBusSCSI
@@ -87,7 +88,7 @@ const (
 	TemplateNetworkModelInvalid
 )
 
-func (value TemplateNetworkModel) toString() string{
+func (value TemplateNetworkModel) ToString() string{
 	switch value{
 	case TemplateNetworkModelVirtIO:
 		return NetworkModelVIRTIO
@@ -111,7 +112,7 @@ const (
 	TemplateDisplayDriverInvalid
 )
 
-func (value TemplateDisplayDriver) toString() string{
+func (value TemplateDisplayDriver) ToString() string{
 	switch value{
 	case TemplateDisplayDriverVGA:
 		return DisplayDriverVGA
@@ -136,7 +137,7 @@ const (
 	TemplateRemoteControlInvalid
 )
 
-func (value TemplateRemoteControl) toString() string{
+func (value TemplateRemoteControl) ToString() string{
 	switch value{
 	case TemplateRemoteControlVNC:
 		return RemoteControlVNC
@@ -155,7 +156,7 @@ const (
 	TemplateUSBModelInvalid
 )
 
-func (value TemplateUSBModel) toString() string{
+func (value TemplateUSBModel) ToString() string{
 	switch value{
 	case TemplateUSBModelNone:
 		return USBModelNone
@@ -175,7 +176,7 @@ const (
 	TemplateTabletModelInvalid
 )
 
-func (value TemplateTabletModel) toString() string{
+func (value TemplateTabletModel) ToString() string{
 	switch value{
 	case TemplateTabletModelNone:
 		return TabletBusNone
@@ -343,7 +344,52 @@ const (
 	InsCmdModifyCPUPriority
 	InsCmdModifyDiskThreshold
 	InsCmdModifyNetworkThreshold
+	InsCmdResetMonitorSecret
+	InsCmdInvalid
 )
+
+var instanceCommandNames = []string{
+	"Create",
+	"Delete",
+	"Get",
+	"GetStatus",
+	"GetAllConfig",
+	"Modify",
+	"Start",
+	"Stop",
+	"Attach",
+	"Detach",
+	"IsRunning",
+	"ModifyCore",
+	"ModifyMemory",
+	"ModifyAuth",
+	"GetAuth",
+	"UpdateDiskSize",
+	"AddEventListener",
+	"RemoveEventListener",
+	"FinishInitialize",
+	"InsertMedia",
+	"EjectMedia",
+	"UsingStorage",
+	"DetachStorage",
+	"GetNetworkResource",
+	"AttachInstance",
+	"DetachInstance",
+	"MigrateInstance",
+	"Rename",
+	"ResetSystem",
+	"ModifyCPUPriority",
+	"ModifyDiskThreshold",
+	"ModifyNetworkThreshold",
+	"ResetMonitorSecret",
+}
+
+func (c InstanceCommandType) toString() string {
+	if c >= InsCmdInvalid{
+		return  "invalid"
+	}
+	return instanceCommandNames[c]
+}
 
 type InstanceStatusChangedEvent struct {
 	ID        string
@@ -372,15 +418,6 @@ const (
 	MetaFileSuffix    = "meta"
 )
 
-//supported version
-const (
-	SystemVersionCentOS7    = "centos7"
-	SystemVersionCentOS6    = "centos6"
-	SystemVersionWindow2012 = "win2012"
-	SystemVersionGeneral    = "general"
-	SystemVersionLegacy     = "legacy"
-)
-
 const (
 	TimeFormatLayout = "2006-01-02 15:04:05"
 )
@@ -395,15 +432,21 @@ type InstanceManager struct {
 	storageURL      string
 	events          chan InstanceStatusChangedEvent
 	eventListeners  map[string]chan InstanceStatusChangedEvent
+	randomGenerator *rand.Rand
 	runner          *framework.SimpleRunner
 }
 
-func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (*InstanceManager, error) {
+func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (manager *InstanceManager, err error) {
+	if InsCmdInvalid != len(instanceCommandNames){
+		err = fmt.Errorf("insufficient command names %d/%d", len(instanceCommandNames), InsCmdInvalid)
+		return
+	}
+
 	const (
 		InstanceFilename = "instance.data"
 		DefaultQueueSize = 1 << 10
 	)
-	var manager = &InstanceManager{}
+	manager = &InstanceManager{}
 	manager.runner = framework.CreateSimpleRunner(manager.Routine)
 	manager.commands = make(chan instanceCommand, DefaultQueueSize)
 	manager.events = make(chan InstanceStatusChangedEvent, DefaultQueueSize)
@@ -411,15 +454,15 @@ func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (*Instance
 	manager.instances = map[string]InstanceStatus{}
 	manager.eventListeners = map[string]chan InstanceStatusChangedEvent{}
 	manager.defaultTemplate = HardwareTemplate{
-		OperatingSystem: TemplateOperatingSystem(TemplateOperatingSystemLinux).toString(),
-		Disk:            TemplateDiskDriver(TemplateDiskDriverSCSI).toString(),
-		Network:         TemplateNetworkModel(TemplateNetworkModelVirtIO).toString(),
-		Display:         TemplateDisplayDriver(TemplateDisplayDriverVGA).toString(),
-		Control:         TemplateRemoteControl(TemplateRemoteControlVNC).toString(),
-		USB:             TemplateUSBModel(TemplateUSBModelNone).toString(),
-		Tablet:          TemplateTabletModel(TemplateTabletModelUSB).toString(),
+		OperatingSystem: TemplateOperatingSystem(TemplateOperatingSystemLinux).ToString(),
+		Disk:            TemplateDiskDriver(TemplateDiskDriverSCSI).ToString(),
+		Network:         TemplateNetworkModel(TemplateNetworkModelVirtIO).ToString(),
+		Display:         TemplateDisplayDriver(TemplateDisplayDriverVGA).ToString(),
+		Control:         TemplateRemoteControl(TemplateRemoteControlVNC).ToString(),
+		USB:             TemplateUSBModel(TemplateUSBModelNone).ToString(),
+		Tablet:          TemplateTabletModel(TemplateTabletModelUSB).ToString(),
 	}
-	var err error
+	manager.randomGenerator = rand.New(rand.NewSource(time.Now().UnixNano()))
 	if manager.util, err = CreateInstanceUtility(connect); err != nil {
 		return nil, err
 	}
@@ -690,6 +733,10 @@ func (manager *InstanceManager) ResetGuestSystem(id string, resp chan error){
 	manager.commands <- instanceCommand{Type: InsCmdResetSystem, Instance: id, ErrorChan:resp}
 }
 
+func (manager *InstanceManager) ResetMonitorPassword(id string, respChan chan InstanceResult){
+	manager.commands <- instanceCommand{Type: InsCmdResetMonitorSecret, Instance: id, ResultChan: respChan}
+}
+
 type instanceDataConfig struct {
 	Instances   []GuestConfig `json:"instances"`
 	StoragePool string        `json:"storage_pool,omitempty"`
@@ -865,11 +912,13 @@ func (manager *InstanceManager) handleCommand(cmd instanceCommand) {
 		err = manager.handleDetachInstances(cmd.InstanceList, cmd.ErrorChan)
 	case InsCmdMigrateInstance:
 		err = manager.handleMigrateInstances(cmd.InstanceList, cmd.ErrorChan)
+	case InsCmdResetMonitorSecret:
+		err = manager.handleResetMonitorPassword(cmd.Instance, cmd.ResultChan)
 	default:
 		log.Printf("<instance> unsupported command type %d", cmd.Type)
 	}
 	if err != nil {
-		log.Printf("<instance> handle command %d fail: %s", cmd.Type, err.Error())
+		log.Printf("<instance> handle command %s fail: %s", cmd.Type.toString(), err.Error())
 	}
 }
 
@@ -1575,6 +1624,33 @@ func (manager *InstanceManager) handleRemoveEventListener(listener string) (err 
 	return nil
 }
 
+func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, respChan chan InstanceResult) (err error){
+	defer func() {
+		if err != nil{
+			respChan <- InstanceResult{Error: err}
+		}
+	}()
+	const (
+		MonitorSecretLength = 12
+	)
+	var ins InstanceStatus
+	var exists bool
+	if ins, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		return
+	}
+	var newSecret = manager.generatePassword(MonitorSecretLength)
+	if err = manager.util.ResetMonitorSecret(instanceID, ins.Template.Control, ins.MonitorPort, newSecret); err != nil{
+		err = fmt.Errorf("reset monitor secret fail: %s", err.Error())
+		return
+	}
+	ins.MonitorSecret = newSecret
+	manager.instances[instanceID] = ins
+	respChan <- InstanceResult{Password: newSecret}
+	log.Printf("<instance> monitor secret of instance '%s' reset", ins.Name)
+	return manager.saveConfig()
+}
+
 func (config *GuestConfig) Marshal(message framework.Message) error {
 	message.SetString(framework.ParamKeyName, config.Name)
 	message.SetString(framework.ParamKeyInstance, config.ID)
@@ -1642,4 +1718,16 @@ func (manager *InstanceManager) StartCPUMonitor(status *InstanceStatus) (error) 
 
 func (manager *InstanceManager) apiPath(path string) string{
 	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
+}
+
+func (manager *InstanceManager) generatePassword(length int) string {
+	const (
+		Letters = "~!@#$%^&*()_[]-=+0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	)
+	var result = make([]byte, length)
+	var n = len(Letters)
+	for i := 0; i < length; i++ {
+		result[i] = Letters[manager.randomGenerator.Intn(n)]
+	}
+	return string(result)
 }

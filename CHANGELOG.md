@@ -5,7 +5,8 @@
 ### Added
 
 - Query/Change storage path
-- Create guest using template 
+- Create guest using template, use vga as the default video driver for better resolution 
+- Reset monitor secret
 
 ## [1.1.1] - 2020-01-01 
 

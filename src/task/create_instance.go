@@ -61,11 +61,29 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		err = fmt.Errorf("get template fail: %s", err.Error())
 		return
 	}else{
-		const ValidOptionCount = 7
+		const (
+			OptionOffsetOS = iota
+			OptionOffsetDisk
+			OptionOffsetNetwork
+			OptionOffsetDisplay
+			OptionOffsetControl
+			OptionOffsetUSB
+			OptionOffsetTablet
+			ValidOptionCount
+		)
 		if ValidOptionCount != len(templateOptions){
 			err = fmt.Errorf("template options count mismatch %d / %d", len(templateOptions), ValidOptionCount)
 			return
 		}
+		var t = service.HardwareTemplate{
+			OperatingSystem: service.TemplateOperatingSystem(templateOptions[OptionOffsetOS]).ToString(),
+			Disk: service.TemplateDiskDriver(templateOptions[OptionOffsetDisk]).ToString(),
+			Network: service.TemplateNetworkModel(templateOptions[OptionOffsetNetwork]).ToString(),
+			Display: service.TemplateDisplayDriver(templateOptions[OptionOffsetDisplay]).ToString(),
+			Control: service.TemplateRemoteControl(templateOptions[OptionOffsetControl]).ToString(),
+			USB: service.TemplateUSBModel(templateOptions[OptionOffsetUSB]).ToString(),
+		}
+		config.Template = &t
 	}
 
 	if modeArray, err := request.GetUIntArray(framework.ParamKeyMode); err != nil {
@@ -526,7 +544,7 @@ func (executor *CreateInstanceExecutor) generateMacAddress() (string, error) {
 	return fmt.Sprintf("%s:%02x:%02x:%02x", MacPrefix, buf[0], buf[1], buf[2]), nil
 }
 
-func (executor *CreateInstanceExecutor) generatePassword(length int) (string) {
+func (executor *CreateInstanceExecutor) generatePassword(length int) string {
 	const (
 		Letters = "~!@#$%^&*()_[]-=+0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	)

@@ -69,7 +69,7 @@ const (
 	storageCommandInvalid
 )
 
-var CommandNames = []string{
+var storageCommandNames = []string{
 	"CreateVolume",
 	"DeleteVolume",
 	"WriteDiskImage",
@@ -184,7 +184,7 @@ func (c storageCommandType) toString() string {
 	if c >= storageCommandInvalid{
 		return  "invalid"
 	}
-	return CommandNames[c]
+	return storageCommandNames[c]
 }
 
 func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *StorageManager, err error) {
@@ -193,8 +193,8 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *S
 		DefaultQueueSize      = 1 << 10
 	)
 	//check const
-	if storageCommandInvalid != len(CommandNames){
-		err = fmt.Errorf("insufficient command names %d/%d", len(CommandNames), storageCommandInvalid)
+	if storageCommandInvalid != len(storageCommandNames){
+		err = fmt.Errorf("insufficient command names %d/%d", len(storageCommandNames), storageCommandInvalid)
 		return
 	}
 	manager = &StorageManager{}

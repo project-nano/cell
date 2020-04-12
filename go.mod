@@ -5,7 +5,7 @@ go 1.13
 replace (
 	github.com/project-nano/cell/service => ./src/service
 	github.com/project-nano/cell/task => ./src/task
-	github.com/project-nano/framework => ../framework
+	github.com/project-nano/framework => /home/develop/nano/framework
 )
 
 require (
