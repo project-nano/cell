@@ -82,6 +82,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			Display: service.TemplateDisplayDriver(templateOptions[OptionOffsetDisplay]).ToString(),
 			Control: service.TemplateRemoteControl(templateOptions[OptionOffsetControl]).ToString(),
 			USB: service.TemplateUSBModel(templateOptions[OptionOffsetUSB]).ToString(),
+			Tablet: service.TemplateTabletModel(templateOptions[OptionOffsetTablet]).ToString(),
 		}
 		config.Template = &t
 	}
