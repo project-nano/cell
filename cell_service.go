@@ -151,7 +151,8 @@ func (cell *CellService) InitialEndpoint() error {
 	if cell.insManager, err = service.CreateInstanceManager(cell.DataPath, cell.virConnect); err != nil {
 		return err
 	}
-	if cell.collector, err = CreateCollectorModule(cell, cell.insManager.GetEventChannel()); err != nil {
+	if cell.collector, err = CreateCollectorModule(cell,
+		cell.insManager.GetEventChannel(), cell.storageManager.GetOutputEventChannel()); err != nil {
 		return err
 	}
 

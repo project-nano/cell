@@ -149,23 +149,24 @@ type PendingTask struct {
 }
 
 type StorageManager struct {
-	commands             chan storageCommand
-	dataFile             string
-	currentPool          string
-	nfsEnabled           bool
-	localSystemDiskPaths []string
-	localDataDiskPaths   []string
-	storageMode          StoragePoolMode
-	pools                map[string]ManagedStoragePool
-	schedulers           map[string]*IOScheduler //key = pool name
-	groups               map[string]InstanceVolumeGroup
-	tasks                map[framework.SessionID]PendingTask
-	progressChan         chan SchedulerUpdate
-	scheduleChan         chan SchedulerResult
-	eventChan            chan schedulerEvent
-	utility              *StorageUtility
-	initiatorIP          string
-	runner               *framework.SimpleRunner
+	commands               chan storageCommand
+	dataFile               string
+	currentPool            string
+	nfsEnabled             bool
+	localSystemDiskPaths   []string
+	localDataDiskPaths     []string
+	storageMode            StoragePoolMode
+	pools                  map[string]ManagedStoragePool
+	schedulers             map[string]*IOScheduler //key = pool name
+	groups                 map[string]InstanceVolumeGroup
+	tasks                  map[framework.SessionID]PendingTask
+	progressChan           chan SchedulerUpdate
+	scheduleChan           chan SchedulerResult
+	eventChan              chan schedulerEvent
+	outputStorageEventChan chan []string
+	utility                *StorageUtility
+	initiatorIP            string
+	runner                 *framework.SimpleRunner
 }
 
 const (
@@ -202,6 +203,7 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *S
 	manager.progressChan = make(chan SchedulerUpdate, DefaultQueueSize)
 	manager.scheduleChan = make(chan SchedulerResult, DefaultQueueSize)
 	manager.eventChan = make(chan schedulerEvent, DefaultQueueSize)
+	manager.outputStorageEventChan = make(chan []string, DefaultQueueSize)
 	manager.dataFile = filepath.Join(dataPath, StorageFilename)
 	manager.initiatorIP, err = GetCurrentIPOfDefaultBridge()
 	if err != nil {
@@ -224,6 +226,7 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *S
 		err = fmt.Errorf("start all scheduler fail: %s", err.Error())
 		return
 	}
+	manager.notifyStoragePathsChanged()
 	return manager, nil
 }
 
@@ -233,6 +236,14 @@ func (manager *StorageManager) Start() error{
 
 func (manager *StorageManager) Stop() error{
 	return manager.runner.Stop()
+}
+
+func (manager *StorageManager)notifyStoragePathsChanged(){
+	manager.outputStorageEventChan <- manager.localSystemDiskPaths
+}
+
+func (manager *StorageManager)GetOutputEventChannel() chan []string{
+	return manager.outputStorageEventChan
 }
 
 func (manager *StorageManager) Routine(c framework.RoutineController) {
@@ -1693,6 +1704,7 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 	manager.localDataDiskPaths = []string{newPath}
 	log.Printf("<storage> default storage path changed to '%s'", newPath)
 	err = manager.saveConfig()
+	manager.notifyStoragePathsChanged()
 	return
 }
 

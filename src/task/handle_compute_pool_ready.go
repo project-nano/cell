@@ -146,7 +146,13 @@ func (executor *HandleComputePoolReadyExecutor) Execute(id framework.SessionID, 
 			disks = append(disks, diskSize)
 		}
 		addresses = append(addresses, config.NetworkAddress)
-		systems = append(systems, config.Template.OperatingSystem)
+		var operatingSystem string
+		if nil != config.Template{
+			operatingSystem = config.Template.OperatingSystem
+		}else{
+			operatingSystem = config.System
+		}
+		systems = append(systems, operatingSystem)
 		createTime = append(createTime, config.CreateTime)
 		internal = append(internal, config.InternalAddress)
 		external = append(external, config.ExternalAddress)

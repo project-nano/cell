@@ -8,6 +8,10 @@
 - Create guest using template, use vga as the default video driver for better resolution 
 - Reset monitor secret
 
+### Changed
+
+- Collect disk space via storage paths 
+
 ## [1.1.1] - 2020-01-01 
 
 ### Changed

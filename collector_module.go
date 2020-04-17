@@ -1,18 +1,16 @@
 package main
 
 import (
-	"github.com/project-nano/framework"
-	"time"
-	"log"
-	"github.com/shirou/gopsutil/cpu"
-	"github.com/shirou/gopsutil/mem"
-	"github.com/shirou/gopsutil/disk"
-	"github.com/shirou/gopsutil/net"
 	"fmt"
 	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
+	"github.com/shirou/gopsutil/cpu"
+	"github.com/shirou/gopsutil/disk"
+	"github.com/shirou/gopsutil/mem"
+	"github.com/shirou/gopsutil/net"
+	"log"
+	"time"
 )
-
-
 
 type hostStatus struct {
 	Cores           uint
@@ -52,18 +50,21 @@ type collectorCmd struct {
 type collectorCommandType int
 
 const (
-	collectCommandAdd        = iota
+	collectCommandAdd = iota
 	collectCommandRemove
 )
 
 type CollectorModule struct {
-	sender         framework.MessageSender
-	commands       chan collectorCmd
-	instanceEvents chan service.InstanceStatusChangedEvent
-	runner         *framework.SimpleRunner
+	sender                framework.MessageSender
+	commands              chan collectorCmd
+	instanceEvents        chan service.InstanceStatusChangedEvent
+	onStoragePathsChanged chan []string
+	localStoragePaths     []string
+	runner                *framework.SimpleRunner
 }
 
-func CreateCollectorModule(sender framework.MessageSender, eventChan chan service.InstanceStatusChangedEvent) (*CollectorModule, error) {
+func CreateCollectorModule(sender framework.MessageSender,
+	eventChan chan service.InstanceStatusChangedEvent, storageChan chan []string) (*CollectorModule, error) {
 	const (
 		DefaultQueueSize = 1 << 10
 	)
@@ -71,31 +72,32 @@ func CreateCollectorModule(sender framework.MessageSender, eventChan chan servic
 	module.sender = sender
 	module.commands = make(chan collectorCmd, DefaultQueueSize)
 	module.instanceEvents = eventChan
+	module.onStoragePathsChanged = storageChan
 	module.runner = framework.CreateSimpleRunner(module.Routine)
 	return &module, nil
 }
 
-func (collector *CollectorModule)AddObserver(name string) error{
+func (collector *CollectorModule) AddObserver(name string) error {
 	collector.commands <- collectorCmd{collectCommandAdd, name}
 	return nil
 }
 
-func (collector *CollectorModule)RemoveObserver(name string) error{
+func (collector *CollectorModule) RemoveObserver(name string) error {
 	collector.commands <- collectorCmd{collectCommandRemove, name}
 	return nil
 }
 
-func (collector *CollectorModule) Start() error{
+func (collector *CollectorModule) Start() error {
 	return collector.runner.Start()
 }
 
-func (collector *CollectorModule) Stop() error{
+func (collector *CollectorModule) Stop() error {
 	return collector.runner.Stop()
 }
 
-func (collector *CollectorModule)Routine(c framework.RoutineController){
+func (collector *CollectorModule) Routine(c framework.RoutineController) {
 	const (
-		reportInterval = 2*time.Second
+		reportInterval  = 2 * time.Second
 		collectInterval = reportInterval
 	)
 	log.Println("<collector> module started")
@@ -110,34 +112,34 @@ func (collector *CollectorModule)Routine(c framework.RoutineController){
 	//prepare cpu percentage
 	cpu.Percent(0, false)
 
-	for !c.IsStopping(){
+	for !c.IsStopping() {
 		select {
-		case <- reportTicker.C:
+		case <-reportTicker.C:
 			//on report
 			if !reportAvailable {
 				break
 			}
-			if 0 == len(observerMap){
+			if 0 == len(observerMap) {
 				//no observer available
 				break
 			}
-			for target, _ := range observerMap{
-				if err := collector.sender.SendMessage(reportMessage, target); err != nil{
+			for target, _ := range observerMap {
+				if err := collector.sender.SendMessage(reportMessage, target); err != nil {
 					log.Printf("<collector> warning: send report to %s fail: %s", target, err.Error())
 				}
 			}
 
-		case <- collectTicker.C:
+		case <-collectTicker.C:
 			//on collect
-			status, err := collectHostStatus()
-			if err != nil{
+			status, err := collector.collectHostStatus()
+			if err != nil {
 				log.Printf("<collector> collect host status fail: %s", err.Error())
 				break
 			}
 			if !latestSnapshotAvailable {
 				//collect latest counter
 				latestIOSnapshot, err = captureIOSnapshot()
-				if err != nil{
+				if err != nil {
 					log.Printf("<collector> capture first io snapshot fail: %s", err.Error())
 					break
 				}
@@ -145,42 +147,45 @@ func (collector *CollectorModule)Routine(c framework.RoutineController){
 				break
 			}
 			currentSnapshot, err := captureIOSnapshot()
-			if err != nil{
+			if err != nil {
 				log.Printf("<collector> capture io snapshot fail: %s", err.Error())
 				break
 			}
 			counter := computeIOCounter(latestIOSnapshot, currentSnapshot)
 			latestIOSnapshot = currentSnapshot
 			reportMessage, err = buildObserverNotifyMessage(status, counter)
-			if err != nil{
+			if err != nil {
 				log.Printf("<collector> marshal report message fail: %s", err.Error())
 				break
 			}
 			reportAvailable = true
-		case <- c.GetNotifyChannel():
+		case <-c.GetNotifyChannel():
 			//exit
 			c.SetStopping()
-		case cmd := <- collector.commands:
+		case cmd := <-collector.commands:
 			switch cmd.Command {
 			case collectCommandAdd:
 				var coreName = cmd.Name
-				if _, exists := observerMap[coreName]; exists{
+				if _, exists := observerMap[coreName]; exists {
 					log.Printf("<collector> observer %s already exists", coreName)
 					break
 				}
 				observerMap[coreName] = true
 				log.Printf("<collector> new observer %s added", coreName)
 			case collectCommandRemove:
-				if _, exists := observerMap[cmd.Name]; !exists{
+				if _, exists := observerMap[cmd.Name]; !exists {
 					log.Printf("<collector> invalid observer %s", cmd.Name)
-				}else{
+				} else {
 					delete(observerMap, cmd.Name)
 					log.Printf("<collector> observer %s removed", cmd.Name)
 				}
 			default:
 				log.Printf("<collector> invalid collector command %d", cmd.Command)
 			}
-		case event := <- collector.instanceEvents:
+		case paths := <- collector.onStoragePathsChanged:
+			collector.localStoragePaths = paths
+			log.Printf("<collector> local storage paths changed to %s", paths)
+		case event := <-collector.instanceEvents:
 			var msg framework.Message
 			switch event.Event {
 			case service.InstanceStarted:
@@ -207,44 +212,42 @@ func (collector *CollectorModule)Routine(c framework.RoutineController){
 	c.NotifyExit()
 }
 
-func (collector *CollectorModule)broadCastMessage(message framework.Message, observers map[string]bool)  {
-	if 0 == len(observers){
+func (collector *CollectorModule) broadCastMessage(message framework.Message, observers map[string]bool) {
+	if 0 == len(observers) {
 		log.Println("<collector> ignore broadcast, cause no observer available")
 		return
 	}
-	for receiver, _ := range observers{
-		if err := collector.sender.SendMessage(message, receiver); err != nil{
+	for receiver, _ := range observers {
+		if err := collector.sender.SendMessage(message, receiver); err != nil {
 			log.Printf("<collector> warnning: notify message %08X to %s fail: %s", message.GetID(), receiver, err.Error())
 		}
 	}
 }
 
-func collectHostStatus() (hostStatus, error){
+func (collector *CollectorModule)collectHostStatus() (hostStatus, error) {
 	var status hostStatus
 	count, err := cpu.Counts(true)
-	if err != nil{
+	if err != nil {
 		return status, err
 	}
 	status.Cores = uint(count)
 	usages, err := cpu.Percent(0, false)
-	if err != nil{
+	if err != nil {
 		return status, err
 	}
-	if 1 != len(usages){
+	if 1 != len(usages) {
 		return status, fmt.Errorf("unpected cpu usages size %d", len(usages))
 	}
 	status.CpuUsage = usages[0]
 	vm, err := mem.VirtualMemory()
-	if err != nil{
+	if err != nil {
 		return status, err
 	}
 	status.Memory = vm.Total
 	status.MemoryAvailable = vm.Available
-	//todo: using mounted local pool path
-	var	paths = []string{"/"}
-	for _, path := range paths{
+	for _, path := range collector.localStoragePaths {
 		usage, err := disk.Usage(path)
-		if err != nil{
+		if err != nil {
 			return status, err
 		}
 		status.Disk += usage.Total
@@ -253,30 +256,30 @@ func collectHostStatus() (hostStatus, error){
 	return status, nil
 }
 
-func captureIOSnapshot() (ioSnapshot, error){
+func captureIOSnapshot() (ioSnapshot, error) {
 	var snapshot ioSnapshot
 	partitions, err := disk.Partitions(false)
-	if err != nil{
+	if err != nil {
 		return snapshot, err
 	}
-	for _, partitionStat := range partitions{
+	for _, partitionStat := range partitions {
 		counters, err := disk.IOCounters(partitionStat.Device)
-		if err != nil{
+		if err != nil {
 			return snapshot, err
 		}
-		for _, counter := range counters{
-		//for devName, counter := range counters{
-				snapshot.DiskWrite += counter.WriteBytes
-				snapshot.DiskRead += counter.ReadBytes
-				//log.Printf("disk io %s > %s: %d / %d", partitionStat.Device, devName, counter.WriteBytes, counter.ReadBytes)
+		for _, counter := range counters {
+			//for devName, counter := range counters{
+			snapshot.DiskWrite += counter.WriteBytes
+			snapshot.DiskRead += counter.ReadBytes
+			//log.Printf("disk io %s > %s: %d / %d", partitionStat.Device, devName, counter.WriteBytes, counter.ReadBytes)
 		}
 	}
 
 	netStats, err := net.IOCounters(false)
-	if err != nil{
+	if err != nil {
 		return snapshot, err
 	}
-	for _, stat := range netStats{
+	for _, stat := range netStats {
 		snapshot.NetworkReceive += stat.BytesRecv
 		snapshot.NetworkSend += stat.BytesSent
 		//log.Printf("interface %s: %d / %d", stat.Name, stat.BytesSent, stat.BytesRecv)
@@ -285,14 +288,14 @@ func captureIOSnapshot() (ioSnapshot, error){
 	return snapshot, nil
 }
 
-func computeIOCounter(previous, current ioSnapshot) (ioCounter) {
+func computeIOCounter(previous, current ioSnapshot) ioCounter {
 	elapsed := current.Timestamp.Sub(previous.Timestamp)
-	if elapsed < time.Second * 1{
-		return ioCounter{current.Timestamp, elapsed, 0,0,0,0,
-			0,0,0,0}
+	if elapsed < time.Second*1 {
+		return ioCounter{current.Timestamp, elapsed, 0, 0, 0, 0,
+			0, 0, 0, 0}
 	}
 	elapsedMilliSeconds := uint64(elapsed / time.Millisecond)
-	var result = ioCounter{Timestamp:current.Timestamp, Duration:elapsed}
+	var result = ioCounter{Timestamp: current.Timestamp, Duration: elapsed}
 	result.BytesRead = current.DiskRead - previous.DiskRead
 	result.BytesWritten = current.DiskWrite - previous.DiskWrite
 	result.BytesSent = current.NetworkSend - previous.NetworkSend
@@ -304,9 +307,9 @@ func computeIOCounter(previous, current ioSnapshot) (ioCounter) {
 	return result
 }
 
-func buildObserverNotifyMessage(status hostStatus, io ioCounter) (msg framework.Message, err error){
+func buildObserverNotifyMessage(status hostStatus, io ioCounter) (msg framework.Message, err error) {
 	msg, err = framework.CreateJsonMessage(framework.CellStatusReportEvent)
-	if err != nil{
+	if err != nil {
 		return msg, err
 	}
 	msg.SetUInt(framework.ParamKeyCore, status.Cores)

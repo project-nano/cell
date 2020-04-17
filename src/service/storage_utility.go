@@ -359,6 +359,20 @@ func (util *StorageUtility) restoreSelinuxLabel(path string) (err error) {
 }
 
 func (util *StorageUtility) CreateLocalPool(name, path string) (pool StoragePool, err error) {
+	if _, err = os.Stat(path); os.IsNotExist(err){
+		if err = os.MkdirAll(path, DefaultPathPerm); err != nil{
+			err = fmt.Errorf("create new path '%s' fail: %s", path, err.Error())
+			return
+		}
+	}
+	if err = util.setSelinuxLabel(path); err != nil{
+		err = fmt.Errorf("configure selinux for path '%s' fail: %s", path, err.Error())
+		return
+	}
+	if err = util.restoreSelinuxLabel(path); err != nil{
+		err = fmt.Errorf("enable selinux for path '%s' fail: %s", path, err.Error())
+		return
+	}
 	var define = virStoragePoolDefine{}
 	define.Name = name
 	define.Type = StoragePoolTypeNameLocal

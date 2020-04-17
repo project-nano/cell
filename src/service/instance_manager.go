@@ -485,7 +485,7 @@ func (manager *InstanceManager) GetInstanceNetworkResources() (result map[string
 	return result
 }
 
-func (manager *InstanceManager) GetEventChannel() (chan InstanceStatusChangedEvent) {
+func (manager *InstanceManager) GetEventChannel() chan InstanceStatusChangedEvent {
 	return manager.events
 }
 
