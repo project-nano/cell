@@ -1650,8 +1650,9 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 			//ignore none local pool
 			continue
 		}
-		if 0 != len(pool.Volumes){
-			err = fmt.Errorf("%d volumes attached to previous pool", len(poolName))
+		var currentVolumeCount = len(pool.Volumes)
+		if 0 != currentVolumeCount{
+			err = fmt.Errorf("%d volumes attached to previous pool", currentVolumeCount)
 			return
 		}
 		var empty, exists bool

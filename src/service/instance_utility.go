@@ -69,6 +69,7 @@ type virDomainGraphicsListen struct {
 }
 
 type virDomainGraphicsElement struct {
+	XMLName  xml.Name                 `xml:"graphics"`
 	Type     string                   `xml:"type,attr"`
 	Port     uint                     `xml:"port,attr"`
 	Password string                   `xml:"passwd,attr"`
@@ -976,8 +977,9 @@ func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, por
 		err = fmt.Errorf("check running status fail: %s", err.Error())
 		return err
 	}
+	var updateFlag = libvirt.DOMAIN_DEVICE_MODIFY_CONFIG
 	if isRunning {
-		return fmt.Errorf("instance '%s' is still running", uuid)
+		updateFlag |= libvirt.DOMAIN_DEVICE_MODIFY_LIVE
 	}
 	var graphics = virDomainGraphicsElement{
 		Type:     display,
@@ -990,7 +992,7 @@ func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, por
 		err = fmt.Errorf("generate graphic element fail: %s", err.Error())
 		return
 	}
-	if err = virDomain.UpdateDeviceFlags(string(payload), libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil{
+	if err = virDomain.UpdateDeviceFlags(string(payload), updateFlag); err != nil{
 		err = fmt.Errorf("update graphic element fail: %s", err.Error())
 		return
 	}
@@ -1041,7 +1043,7 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 		err = fmt.Errorf("unsupported network mode :%d", config.NetworkMode)
 		return
 	}
-	if err = define.SetRemoteControl(config.Template.Display, config.MonitorPort, config.MonitorSecret); err != nil {
+	if err = define.SetRemoteControl(config.Template.Control, config.MonitorPort, config.MonitorSecret); err != nil {
 		err = fmt.Errorf("set remote control fail: %s", err.Error())
 		return
 	}

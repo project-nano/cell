@@ -1640,7 +1640,13 @@ func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, re
 		return
 	}
 	var newSecret = manager.generatePassword(MonitorSecretLength)
-	if err = manager.util.ResetMonitorSecret(instanceID, ins.Template.Control, ins.MonitorPort, newSecret); err != nil{
+	var monitorProtocol string
+	if nil != ins.Template{
+		monitorProtocol = ins.Template.Control
+	}else{
+		monitorProtocol = RemoteControlVNC
+	}
+	if err = manager.util.ResetMonitorSecret(instanceID, monitorProtocol, ins.MonitorPort, newSecret); err != nil{
 		err = fmt.Errorf("reset monitor secret fail: %s", err.Error())
 		return
 	}
