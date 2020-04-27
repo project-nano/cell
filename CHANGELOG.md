@@ -12,6 +12,10 @@
 
 - Collect disk space via storage paths 
 
+### Fixed
+
+- Huge/Wrong available memory/disk number when no qga available in guest
+
 ## [1.1.1] - 2020-01-01 
 
 ### Changed

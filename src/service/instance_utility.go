@@ -431,10 +431,14 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 		}else if 0 != rssValue{
 			maxMemory, err := virDomain.GetMaxMemory()
 			if err != nil{
+				err = fmt.Errorf("get max memory of guest '%s' fail: %s", id, err.Error())
 				return ins, err
 			}
-
-			ins.AvailableMemory = (maxMemory- rssValue) << 10
+			if rssValue < maxMemory{
+				ins.AvailableMemory = (maxMemory- rssValue) << 10
+			}else{
+				ins.AvailableMemory = 0
+			}
 			//log.Printf("debug: max %d, rss %d, avail %d", maxMemory, rssValue, ins.AvailableMemory)
 			//log.Println("<instance> warning: available memory stats not supported, using (max - rss) instead")
 		}else{
@@ -463,11 +467,13 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 				continue
 			}
 			var devName = virDisk.Target.Device
-			info, err:= virDomain.GetBlockInfo(devName, 0)
-			if err != nil{
-				return ins, err
-			}
-			ins.AvailableDisk += info.Capacity - info.Allocation
+			//todo: get real available disk space in guest
+			//info, err:= virDomain.GetBlockInfo(devName, 0)
+			//if err != nil{
+			//	return ins, err
+			//}
+			//ins.AvailableDisk += info.Capacity - info.Allocation
+			ins.AvailableDisk = 0
 			stats, err := virDomain.BlockStats(devName)
 			if err != nil{
 				return ins, err
