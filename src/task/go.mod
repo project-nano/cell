@@ -4,7 +4,7 @@ go 1.13
 
 replace (
     github.com/project-nano/cell/service => ../service
-    github.com/project-nano/framework => ../../framework
+    github.com/project-nano/framework => ../../../framework
 )
 require (
 	github.com/pkg/errors v0.9.1

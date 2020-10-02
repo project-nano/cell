@@ -4,6 +4,7 @@ import (
 	"github.com/project-nano/framework"
 	"log"
 	"fmt"
+	"math"
 	"os"
 	"io"
 	"mime/multipart"
@@ -406,10 +407,11 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 					if err = cmd.Run();err !=nil{
 						log.Printf("<scheduler-%s> resize image fail: %s", scheduler.name, err.Error())
 						os.Remove(path)
+						err = fmt.Errorf("resize image to %s fail: %s", bytesToString(targetSize), err.Error())
 						scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 						break
 					}
-					log.Printf("<scheduler-%s> image %s resized to %d", scheduler.name, path, targetSize)
+					log.Printf("<scheduler-%s> image %s resized to %s", scheduler.name, path, bytesToString(targetSize))
 				}
 				scheduler.resultChan <- SchedulerResult{ID: id, Size: uint(processed)}
 				break
@@ -440,13 +442,14 @@ func (scheduler *IOScheduler) handleResizeTask(id framework.SessionID, group, vo
 	if err != nil{
 		err = errors.New(string(errMessage))
 		log.Printf("<scheduler-%s> resize volume fail: %s", scheduler.name, err.Error())
+		err = fmt.Errorf("resize volume to %s fail: %s", bytesToString(size), err.Error())
 		scheduler.resultChan <- SchedulerResult{Error:err, ID:id}
 		return err
 	}
 	var elapsed = time.Now().Sub(begin).Seconds() * 1000
 	scheduler.resultChan <- SchedulerResult{ID:id}
-	log.Printf("<scheduler-%s> resize volume '%s' to %d GiB in %.3f milliseconds",
-		scheduler.name, path, size >> 30, elapsed)
+	log.Printf("<scheduler-%s> resize volume '%s' to %s in %.3f milliseconds",
+		scheduler.name, path, bytesToString(size), elapsed)
 	return nil
 }
 
@@ -576,4 +579,36 @@ func (scheduler *IOScheduler)generateCheckSum(target string) (sum string, err er
 
 func (scheduler *IOScheduler) apiPath(path string) string{
 	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
+}
+
+func bytesToString(sizeInBytes uint64) string {
+	const (
+		KB = 1 << 10
+		MB = KB << 10
+		GB = MB << 10
+		TB = GB << 10
+	)
+	var value = float64(sizeInBytes)
+	var unit string
+	if value < KB{
+		return fmt.Sprintf("%d Bytes", sizeInBytes)
+	}else if value < MB{
+		unit = "KB"
+		value = value / KB
+	}else if value < GB{
+		unit = "MB"
+		value = value / MB
+	}else if value < TB {
+		unit = "GB"
+		value = value / GB
+	}else{
+		unit = "TB"
+		value = value / TB
+	}
+	if value == math.Round(value){
+		//integer
+		return fmt.Sprintf("%d %s", int(value), unit)
+	}else{
+		return fmt.Sprintf("%.02f %s", value, unit)
+	}
 }

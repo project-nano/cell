@@ -1,5 +1,13 @@
 # Change Log
 
+## [1.3.0] - 2020-10-02
+ 
+### Changed
+
+- Return an explicit error when resize disk fail after creating a new image
+- Return an explicit error when resize volume fail
+- Optimize output of image size in IO Scheduler 
+
 ## [1.2.0] - 2020-04-11 
 
 ### Added

@@ -5,7 +5,7 @@ go 1.13
 replace (
 	github.com/project-nano/cell/service => ./src/service
 	github.com/project-nano/cell/task => ./src/task
-	github.com/project-nano/framework => /home/develop/nano/framework
+	github.com/project-nano/framework => ../framework
 )
 
 require (
@@ -15,7 +15,7 @@ require (
 	github.com/libvirt/libvirt-go v6.1.0+incompatible
 	github.com/project-nano/cell/service v0.0.0-00010101000000-000000000000
 	github.com/project-nano/cell/task v0.0.0-00010101000000-000000000000
-	github.com/project-nano/framework v1.0.1
+	github.com/project-nano/framework v1.0.3
 	github.com/project-nano/sonar v0.0.0-20190628085230-df7942628d6f
 	github.com/sevlyar/go-daemon v0.1.5 // indirect
 	github.com/shirou/gopsutil v2.19.10+incompatible
