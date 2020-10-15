@@ -199,6 +199,7 @@ type HardwareTemplate struct {
 	Tablet          string `json:"tablet,omitempty"`
 }
 
+
 type GuestConfig struct {
 	Name               string              `json:"name"`
 	ID                 string              `json:"id"`
@@ -232,6 +233,7 @@ type GuestConfig struct {
 	CloudInitAvailable bool                `json:"cloud_init_available,omitempty"`
 	BootImage          string              `json:"boot_image,omitempty"`
 	CreateTime         string              `json:"create_time,omitempty"`
+	AddressAllocation  string              `json:"address_allocation,omitempty"`
 	InternalAddress    string              `json:"internal_address,omitemtpy"`
 	ExternalAddress    string              `json:"external_address,omitemtpy"`
 	CPUPriority        PriorityEnum        `json:"cpu_priority,omitempty"`
@@ -292,6 +294,7 @@ type instanceCommand struct {
 	Index           int
 	Size            uint64
 	Name            string
+	Allocation      string
 	Media           InstanceMediaConfig
 	Priority        PriorityEnum
 	ReadSpeed       uint64
@@ -345,6 +348,7 @@ const (
 	InsCmdModifyDiskThreshold
 	InsCmdModifyNetworkThreshold
 	InsCmdResetMonitorSecret
+	InsCmdSyncAddressAllocation
 	InsCmdInvalid
 )
 
@@ -382,6 +386,7 @@ var instanceCommandNames = []string{
 	"ModifyDiskThreshold",
 	"ModifyNetworkThreshold",
 	"ResetMonitorSecret",
+	"SyncAddressAllocation",
 }
 
 func (c InstanceCommandType) toString() string {
@@ -737,6 +742,11 @@ func (manager *InstanceManager) ResetMonitorPassword(id string, respChan chan In
 	manager.commands <- instanceCommand{Type: InsCmdResetMonitorSecret, Instance: id, ResultChan: respChan}
 }
 
+
+func (manager *InstanceManager) SyncAddressAllocation(allocationMode string){
+	manager.commands <- instanceCommand{Type: InsCmdSyncAddressAllocation, Allocation: allocationMode}
+}
+
 type instanceDataConfig struct {
 	Instances   []GuestConfig `json:"instances"`
 	StoragePool string        `json:"storage_pool,omitempty"`
@@ -914,6 +924,8 @@ func (manager *InstanceManager) handleCommand(cmd instanceCommand) {
 		err = manager.handleMigrateInstances(cmd.InstanceList, cmd.ErrorChan)
 	case InsCmdResetMonitorSecret:
 		err = manager.handleResetMonitorPassword(cmd.Instance, cmd.ResultChan)
+	case InsCmdSyncAddressAllocation:
+		err = manager.handleSyncAddressAllocation(cmd.Allocation)
 	default:
 		log.Printf("<instance> unsupported command type %d", cmd.Type)
 	}
@@ -1655,6 +1667,29 @@ func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, re
 	respChan <- InstanceResult{Password: newSecret}
 	log.Printf("<instance> monitor secret of instance '%s' reset", ins.Name)
 	return manager.saveConfig()
+}
+
+func (manager *InstanceManager) handleSyncAddressAllocation(allocationMode string) (err error){
+	if AddressAllocationNone == allocationMode{
+		return
+	}
+	var modified = false
+	var modifiedCount = 0
+	for id, ins := range manager.instances{
+		if allocationMode != ins.AddressAllocation{
+			ins.AddressAllocation = allocationMode
+			if !modified{
+				modified = true
+			}
+			manager.instances[id] = ins
+			modifiedCount++
+		}
+	}
+	if modified{
+		log.Printf("<instance> update address allocation of %d instance(s) to mode '%s'", modifiedCount, allocationMode)
+		return manager.saveConfig()
+	}
+	return
 }
 
 func (config *GuestConfig) Marshal(message framework.Message) error {

@@ -69,6 +69,7 @@ type InstanceModule interface {
 	DetachInstances(instances []string, respChan chan error)
 	MigrateInstances(instances []string, respChan chan error)
 	ResetMonitorPassword(id string, respChan chan InstanceResult)
+	SyncAddressAllocation(allocationMode string)
 }
 
 type SnapshotConfig struct {
@@ -143,16 +144,18 @@ type NetworkResult struct {
 	Internal    string
 	Gateway     string
 	DNS         []string
+	Allocation  string
 	Resources   map[string]InstanceNetworkResource
 }
 
 type NetworkModule interface {
-	GetDefaultBridge(resp chan NetworkResult)
+	GetBridgeName() string
+	GetCurrentConfig(resp chan NetworkResult)
 	AllocateInstanceResource(instance, hwaddress, internal, external string, resp chan NetworkResult)
 	DeallocateAllResource(instance string, resp chan error)
 	AttachInstances(resources map[string]InstanceNetworkResource, resp chan NetworkResult)
 	DetachInstances(instances []string, resp chan error)
-	UpdateDHCPService(gateway string, dns []string, resp chan error)
+	UpdateAddressAllocation(gateway string, dns []string, allocationMode string, resp chan error)
 	GetAddressByHWAddress(hwaddress string, resp chan NetworkResult)
 }
 

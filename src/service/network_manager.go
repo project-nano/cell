@@ -1,19 +1,19 @@
 package service
 
 import (
-	"github.com/libvirt/libvirt-go"
-	"github.com/project-nano/framework"
-	"log"
-	"path/filepath"
-	"os"
-	"io/ioutil"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/libvirt/libvirt-go"
+	"github.com/project-nano/framework"
+	"io/ioutil"
+	"log"
 	"math/rand"
-	"time"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 )
 
 type InstanceNetworkResource struct {
@@ -34,6 +34,7 @@ type networkCommand struct {
 	External     string
 	Gateway      string
 	DNS          []string
+	Allocation   string
 	Resources    map[string]InstanceNetworkResource
 }
 
@@ -44,23 +45,24 @@ type NetworkManager struct {
 	hwaddressMap      map[string]string //MAC => instance ID
 	DHCPGateway       string
 	DHCPDNS           []string
+	AllocationMode    string
 	commands          chan networkCommand
 	dataFile          string
 	generator         *rand.Rand
 	util              *NetworkUtility
-	OnDHCPUpdated     func(string, []string)
+	OnAddressUpdated  func(string, []string)
 	runner            *framework.SimpleRunner
 }
 
 type networkCommandType int
 
 const (
-	networkCommandGetBridge = iota
+	networkCommandGetCurrentConfig = iota
 	networkCommandAllocateInstanceResource
 	networkCommandDeallocateAllResource
 	networkCommandAttachInstance
 	networkCommandDetachInstance
-	networkCommandUpdateDHCP
+	networkCommandUpdateAllocation
 	networkCommandGetAddress
 )
 
@@ -71,6 +73,11 @@ const (
 )
 
 
+const (
+	AddressAllocationNone      = ""
+	AddressAllocationDHCP      = "dhcp"
+	AddressAllocationCloudInit = "cloudinit"
+)
 
 func CreateNetworkManager(dataPath string, connect *libvirt.Connect) (*NetworkManager, error){
 	const (
@@ -137,8 +144,8 @@ func (manager *NetworkManager) GetBridgeName() string{
 	return DefaultBridgeName
 }
 
-func (manager *NetworkManager)GetDefaultBridge(resp chan NetworkResult){
-	cmd := networkCommand{Type:networkCommandGetBridge, ResultChan:resp}
+func (manager *NetworkManager) GetCurrentConfig(resp chan NetworkResult){
+	cmd := networkCommand{Type: networkCommandGetCurrentConfig, ResultChan:resp}
 	manager.commands <- cmd
 }
 
@@ -159,8 +166,8 @@ func (manager *NetworkManager)DetachInstances(instances []string, resp chan erro
 	manager.commands <- networkCommand{Type:networkCommandDetachInstance, InstanceList: instances, ErrorChan:resp}
 }
 
-func (manager *NetworkManager) UpdateDHCPService(gateway string, dns []string, resp chan error){
-	manager.commands <- networkCommand{Type:networkCommandUpdateDHCP, Gateway:gateway, DNS:dns, ErrorChan:resp}
+func (manager *NetworkManager) UpdateAddressAllocation(gateway string, dns []string, mode string, resp chan error){
+	manager.commands <- networkCommand{Type: networkCommandUpdateAllocation, Gateway:gateway, DNS:dns, Allocation: mode, ErrorChan:resp}
 }
 
 func (manager *NetworkManager) GetAddressByHWAddress(hwaddress string, resp chan NetworkResult){
@@ -193,8 +200,8 @@ func (manager *NetworkManager)Routine(c framework.RoutineController){
 func (manager *NetworkManager)handleCommand(cmd networkCommand){
 	var err error
 	switch cmd.Type {
-	case networkCommandGetBridge:
-		err = manager.handleGetBridge(cmd.ResultChan)
+	case networkCommandGetCurrentConfig:
+		err = manager.handleGetCurrentConfig(cmd.ResultChan)
 	case networkCommandAllocateInstanceResource:
 		err = manager.handleAllocateInstanceResource(cmd.Instance, cmd.HWAddress, cmd.Internal, cmd.External, cmd.ResultChan)
 	case networkCommandDeallocateAllResource:
@@ -203,8 +210,8 @@ func (manager *NetworkManager)handleCommand(cmd networkCommand){
 		err = manager.handleAttachInstances(cmd.Resources, cmd.ResultChan)
 	case networkCommandDetachInstance:
 		err = manager.handleDetachInstances(cmd.InstanceList, cmd.ErrorChan)
-	case networkCommandUpdateDHCP:
-		err = manager.handleUpdateDHCPService(cmd.Gateway, cmd.DNS, cmd.ErrorChan)
+	case networkCommandUpdateAllocation:
+		err = manager.handleUpdateAddressAllocation(cmd.Gateway, cmd.DNS, cmd.Allocation, cmd.ErrorChan)
 	case networkCommandGetAddress:
 		err = manager.handleGetAddressByHWAddress(cmd.HWAddress, cmd.ResultChan)
 	default:
@@ -215,21 +222,25 @@ func (manager *NetworkManager)handleCommand(cmd networkCommand){
 	}
 }
 
-func (manager *NetworkManager)handleGetBridge(respChan chan NetworkResult) error{
+func (manager *NetworkManager) handleGetCurrentConfig(respChan chan NetworkResult) error{
 	if "" == manager.defaultBridge {
 		return errors.New("no bridge available")
 	}
 	var result = NetworkResult{}
 	result.Name = manager.defaultBridge
+	result.Gateway = manager.DHCPGateway
+	result.DNS = manager.DHCPDNS
+	result.Allocation = manager.AllocationMode
 	respChan <- result
 	return nil
 }
 
 type networkDataConfig struct {
-	DefaultBridge string                             `json:"default_bridge"`
-	Resources     map[string]InstanceNetworkResource `json:"resources,omitempty"`
-	DNS           []string                           `json:"dns,omitempty"`
-	Gateway       string                             `json:"gateway,omitempty"`
+	DefaultBridge  string                             `json:"default_bridge"`
+	Resources      map[string]InstanceNetworkResource `json:"resources,omitempty"`
+	DNS            []string                           `json:"dns,omitempty"`
+	Gateway        string                             `json:"gateway,omitempty"`
+	AllocationMode string                             `json:"allocation_mode,omitempty"`
 }
 
 func (manager *NetworkManager)saveConfig() error{
@@ -238,6 +249,7 @@ func (manager *NetworkManager)saveConfig() error{
 	config.Resources = manager.instanceResources
 	config.DNS = manager.DHCPDNS
 	config.Gateway = manager.DHCPGateway
+	config.AllocationMode = manager.AllocationMode
 	data, err := json.MarshalIndent(config, "", " ")
 	if err != nil{
 		return err
@@ -272,6 +284,7 @@ func (manager *NetworkManager)loadConfig() error{
 	manager.defaultBridge = config.DefaultBridge
 	manager.DHCPGateway = config.Gateway
 	manager.DHCPDNS = config.DNS
+	manager.AllocationMode = config.AllocationMode
 	if config.Resources != nil{
 		manager.instanceResources = config.Resources
 	}
@@ -491,7 +504,7 @@ func (manager *NetworkManager) handleDetachInstances(instances []string, respCha
 }
 
 
-func (manager *NetworkManager) handleUpdateDHCPService(gateway string, dns []string, respChan chan error) (err error){
+func (manager *NetworkManager) handleUpdateAddressAllocation(gateway string, dns []string, allocationMode string, respChan chan error) (err error){
 	if !isValidIPv4(gateway){
 		err = fmt.Errorf("invalid gateway '%s'", gateway)
 		respChan <- err
@@ -506,10 +519,12 @@ func (manager *NetworkManager) handleUpdateDHCPService(gateway string, dns []str
 	}
 	manager.DHCPDNS = dns
 	manager.DHCPGateway = gateway
-	log.Printf("<network> update DHCP gateway => '%s', DNS: %s", gateway, strings.Join(dns, "/"))
+	manager.AllocationMode = allocationMode
+	log.Printf("<network> address allocation updated to mode '%s', gateway '%s', DNS: %s",
+		allocationMode, gateway, strings.Join(dns, "/"))
 	respChan <- nil
-	if manager.OnDHCPUpdated != nil{
-		manager.OnDHCPUpdated(gateway, dns)
+	if AddressAllocationDHCP == allocationMode &&manager.OnAddressUpdated != nil{
+		manager.OnAddressUpdated(gateway, dns)
 	}
 	return manager.saveConfig()
 }

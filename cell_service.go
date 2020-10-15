@@ -163,7 +163,7 @@ func (cell *CellService) InitialEndpoint() error {
 	if err = cell.networkManager.SyncInstanceResources(networkResources); err != nil{
 		return err
 	}
-	if cell.initiator, err = service.CreateInitiator(cell.networkManager.GetBridgeName(), cell.insManager); err != nil{
+	if cell.initiator, err = service.CreateInitiator(cell.networkManager, cell.insManager); err != nil{
 		return err
 	}
 	if cell.dhcpService, err = service.CreateDHCPService(cell.networkManager); err != nil{

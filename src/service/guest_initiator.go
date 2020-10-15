@@ -1,20 +1,20 @@
 package service
 
 import (
-	"github.com/project-nano/framework"
-	"net/http"
-	"net"
-	"github.com/julienschmidt/httprouter"
-	"log"
-	"strings"
-	"fmt"
 	"context"
 	"errors"
-	"net/textproto"
-	"mime/multipart"
-	"math/rand"
-	"time"
+	"fmt"
 	"github.com/amoghe/go-crypt"
+	"github.com/julienschmidt/httprouter"
+	"github.com/project-nano/framework"
+	"log"
+	"math/rand"
+	"mime/multipart"
+	"net"
+	"net/http"
+	"net/textproto"
+	"strings"
+	"time"
 )
 
 type GuestInitiator struct {
@@ -24,6 +24,7 @@ type GuestInitiator struct {
 	server              http.Server
 	eventChan           chan InstanceStatusChangedEvent
 	insManager          *InstanceManager
+	networkModule       NetworkModule
 	supportedInterfaces []string
 	generator           *rand.Rand
 	runner              *framework.SimpleRunner
@@ -34,7 +35,7 @@ const (
 	ListenerName       = "initiator"
 )
 
-func CreateInitiator(netDev string, manager *InstanceManager) (initiator *GuestInitiator, err error) {
+func CreateInitiator(networkModule NetworkModule, instanceManager *InstanceManager) (initiator *GuestInitiator, err error) {
 	const (
 		DefaultQueueSize = 1 << 10
 	)
@@ -44,7 +45,7 @@ func CreateInitiator(netDev string, manager *InstanceManager) (initiator *GuestI
 		return
 	}
 	initiator = &GuestInitiator{}
-	initiator.listenDevice = netDev
+	initiator.listenDevice = networkModule.GetBridgeName()
 	initiator.listenAddress = fmt.Sprintf("%s:%d", magicIP, InitiatorMagicPort)
 	initiator.generator = rand.New(rand.NewSource(time.Now().UnixNano()))
 	if err = initiator.listenMagicAddress(); err != nil {
@@ -54,7 +55,8 @@ func CreateInitiator(netDev string, manager *InstanceManager) (initiator *GuestI
 		return
 	}
 	initiator.eventChan = make(chan InstanceStatusChangedEvent, DefaultQueueSize)
-	initiator.insManager = manager
+	initiator.insManager = instanceManager
+	initiator.networkModule = networkModule
 	initiator.runner = framework.CreateSimpleRunner(initiator.Routine)
 	return initiator, nil
 }
@@ -143,6 +145,27 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 	fmt.Fprintf(w, "instance-id: %s\n", ins.ID)
 	var hostname = strings.TrimPrefix(ins.Name, fmt.Sprintf("%s.", ins.Group))
 	fmt.Fprintf(w, "hostname: %s\n", hostname)
+	if AddressAllocationCloudInit == ins.AddressAllocation{
+		//allocate using Cloud-Init
+		var respChan = make(chan NetworkResult, 1)
+		initiator.networkModule.GetCurrentConfig(respChan)
+		var result = <- respChan
+		if nil != result.Error{
+			log.Printf("<initiator> get current network config fail: %s", result.Error.Error())
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(result.Error.Error()))
+			return
+		}
+		//todo: write meta config
+
+		//network-interfaces: |
+		//iface eth0 inet static
+		//address 192.168.1.10
+		//network 192.168.1.0
+		//netmask 255.255.255.0
+		//broadcast 192.168.1.255
+		//gateway 192.168.1.254
+	}
 }
 
 func (initiator *GuestInitiator) getUserData(w http.ResponseWriter, r *http.Request, params httprouter.Params)  {

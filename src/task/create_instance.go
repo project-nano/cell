@@ -281,7 +281,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			{
 				//find bridge
 				var respChan = make(chan service.NetworkResult)
-				executor.NetworkModule.GetDefaultBridge(respChan)
+				executor.NetworkModule.GetCurrentConfig(respChan)
 				result := <-respChan
 				if result.Error != nil {
 					err = result.Error
@@ -290,7 +290,9 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 					return executor.Sender.SendMessage(resp, request.GetSender())
 				}
 				config.NetworkSource = result.Name
-				log.Printf("[%08X] network bridge '%s' allocated for instance '%s'", id, config.NetworkSource, config.Name)
+				config.AddressAllocation = result.Allocation
+				log.Printf("[%08X] network bridge '%s' (mode '%s') allocated for instance '%s'",
+					id, config.NetworkSource, config.AddressAllocation, config.Name)
 			}
 			{
 				//monitor port

@@ -1,6 +1,10 @@
 # Change Log
 
 ## [1.3.0] - 2020-10-02
+
+### Added
+
+- Allocate instance address using Cloud-Init
  
 ### Changed
 

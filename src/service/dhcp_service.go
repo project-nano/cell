@@ -53,7 +53,7 @@ type DHCPService struct {
 	handler       *DHCPHandler
 	operates      chan dhcpOperate
 	leases        map[string]clientLease //key = HW address
-	networkModule *NetworkManager
+	networkModule NetworkModule
 	runner        *framework.SimpleRunner
 }
 
@@ -83,7 +83,7 @@ func CreateDHCPService(netModule *NetworkManager) (service* DHCPService, err err
 	service.operates = make(chan dhcpOperate, 1 << 10)
 	service.networkModule = netModule
 	service.leases = map[string]clientLease{}
-	netModule.OnDHCPUpdated = service.updateServer
+	netModule.OnAddressUpdated = service.updateServer
 	service.handler = &DHCPHandler{service.operates, serverIP}
 	service.dhcpConn, err = net.ListenUDP("udp", listenAddress)
 	if err != nil{

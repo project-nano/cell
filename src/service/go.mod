@@ -1,6 +1,9 @@
 module github.com/project-nano/cell/service
 
 go 1.13
+replace (
+    github.com/project-nano/framework => ../../../framework
+)
 
 require (
 	github.com/amoghe/go-crypt v0.0.0-20191109212615-b2ff80594b7f

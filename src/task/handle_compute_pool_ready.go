@@ -1,6 +1,7 @@
 package task
 
 import (
+	"fmt"
 	"github.com/project-nano/framework"
 	"github.com/project-nano/cell/service"
 	"log"
@@ -81,23 +82,41 @@ func (executor *HandleComputePoolReadyExecutor) Execute(id framework.SessionID, 
 		}
 
 	}
+	var allocationMode string
 	if "" != networkName{
-		gateway, err := request.GetString(framework.ParamKeyGateway)
-		if err != nil{
-			return err
+		var gateway string
+		var dns []string
+		if gateway, err = request.GetString(framework.ParamKeyGateway); err != nil{
+			return
 		}
-		dns, err := request.GetStringArray(framework.ParamKeyServer)
-		if err != nil{
-			return err
+
+		if dns, err = request.GetStringArray(framework.ParamKeyServer); err != nil{
+			return
+		}
+		if allocationMode, err = request.GetString(framework.ParamKeyMode); err != nil{
+			err = fmt.Errorf("get allocation mode fail: %s", err.Error())
+			return
+		}
+		switch allocationMode {
+		case service.AddressAllocationNone:
+		case service.AddressAllocationDHCP:
+		case service.AddressAllocationCloudInit:
+			break
+		default:
+			err = fmt.Errorf("invalid allocation mode :%s", allocationMode)
+			return
 		}
 		var respChan = make(chan error, 1)
-		executor.NetworkModule.UpdateDHCPService(gateway, dns, respChan)
+		executor.NetworkModule.UpdateAddressAllocation(gateway, dns, allocationMode, respChan)
 		err = <- respChan
 		if err != nil{
 			resp.SetError(err.Error())
-			log.Printf("[%08X] update DHCP service fail: %s", id, err.Error())
+			log.Printf("[%08X] update address allocation fail: %s", id, err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
 		}
+	}
+	if service.AddressAllocationNone != allocationMode{
+		executor.InstanceModule.SyncAddressAllocation(allocationMode)
 	}
 	var respChan = make(chan []service.GuestConfig)
 	executor.InstanceModule.GetAllInstance(respChan)

@@ -140,7 +140,7 @@ func CreateTransactionManager(sender framework.MessageSender, instanceModule *se
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.AddressPoolChangedEvent,
-		&task.HandleAddressPoolChangedExecutor{networkModule}); err != nil{
+		&task.HandleAddressPoolChangedExecutor{instanceModule, networkModule}); err != nil{
 		return nil, err
 	}
 	if err = manager.RegisterExecutor(framework.CreateSnapshotRequest,
