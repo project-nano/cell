@@ -126,8 +126,16 @@ func (initiator *GuestInitiator) serveCloudInit(){
 }
 
 func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Request, params httprouter.Params){
+	var err error
 	var version = params.ByName("version")
 	var guestID = params.ByName("id")
+
+	defer func() {
+		if nil != err{
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		}
+	}()
 
 	log.Printf("<initiator> query metadata from %s, version %s", r.RemoteAddr, version)
 	var respChan = make(chan InstanceResult, 1)
@@ -135,8 +143,7 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 	var result = <- respChan
 	if result.Error != nil{
 		log.Printf("<initiator> get meta data for guest '%s' fail: %s", guestID, result.Error.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(result.Error.Error()))
+		err = result.Error
 		return
 	}
 
@@ -152,12 +159,24 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 		var result = <- respChan
 		if nil != result.Error{
 			log.Printf("<initiator> get current network config fail: %s", result.Error.Error())
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(result.Error.Error()))
+			err = result.Error
 			return
 		}
-		//todo: write meta config
 
+		//for internal interface only
+		if "" == ins.InternalAddress{
+			log.Printf("<initiator> no internal address allocated for guest '%s'", ins.Name)
+			err = fmt.Errorf(" no internal address allocated for guest '%s'", ins.Name)
+			return
+		}
+		var gatewayIP = result.Gateway
+		var internalIP net.IP
+		var internalMask *net.IPNet
+		if internalIP, internalMask, err = net.ParseCIDR(ins.InternalAddress); err != nil{
+			log.Printf("<initiator> invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
+			err = fmt.Errorf(" invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
+			return
+		}
 		//network-interfaces: |
 		//iface eth0 inet static
 		//address 192.168.1.10
@@ -165,6 +184,11 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 		//netmask 255.255.255.0
 		//broadcast 192.168.1.255
 		//gateway 192.168.1.254
+		fmt.Fprint(w, "network-interfaces: |\niface eth0 inet static\n")
+		fmt.Fprintf(w, "address %s\n", internalIP.String())
+		fmt.Fprintf(w, "network %s\n", internalMask.IP.String())
+		fmt.Fprintf(w, "netmask %s\n", internalMask.Mask.String())
+		fmt.Fprintf(w, "gateway %s\n", gatewayIP)
 	}
 }
 
