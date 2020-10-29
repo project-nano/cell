@@ -199,6 +199,27 @@ type HardwareTemplate struct {
 	Tablet          string `json:"tablet,omitempty"`
 }
 
+type PolicyRuleProtocol string
+
+const (
+	PolicyRuleProtocolTCP  = "tcp"
+	PolicyRuleProtocolUDP  = "udp"
+	PolicyRuleProtocolICMP = "icmp"
+)
+
+type SecurityPolicyRule struct {
+	Accept        bool               `json:"accept"`
+	Protocol      PolicyRuleProtocol `json:"protocol"`
+	SourceAddress string             `json:"source_address,omitempty"`
+	TargetAddress string             `json:"target_address,omitempty"`
+	TargetPort    uint               `json:"target_port"`
+	Interface     uint               `json:"interface,omitempty"`
+}
+
+type SecurityPolicy struct {
+	Accept bool                 `json:"accept"`
+	Rules  []SecurityPolicyRule `json:"rules,omitempty"`
+}
 
 type GuestConfig struct {
 	Name               string              `json:"name"`
@@ -244,6 +265,7 @@ type GuestConfig struct {
 	ReceiveSpeed       uint64              `json:"receive_speed,omitempty"`
 	SendSpeed          uint64              `json:"send_speed,omitempty"`
 	Template           *HardwareTemplate   `json:"template,omitempty"`
+	Security           *SecurityPolicy     `json:"security,omitempty"`
 }
 
 type InstanceStatus struct {

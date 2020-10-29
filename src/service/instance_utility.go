@@ -61,6 +61,7 @@ type virDomainInterfaceElement struct {
 	Model     *virDomainInterfaceModel     `xml:"model,omitempty"`
 	Target    *virDomainInterfaceTarget    `xml:"target,omitempty"`
 	Bandwidth *virDomainInterfaceBandwidth `xml:"bandwidth,omitempty"`
+	Filter    *virNwfilterRef
 }
 
 type virDomainGraphicsListen struct {
@@ -243,6 +244,36 @@ type virDomainDefine struct {
 	Features    virDomainFeatureElement `xml:"features,omitempty"`
 	Clock       virDomainClockElement   `xml:"clock"`
 }
+
+//nwfilter
+
+type virNwfilerRuleIP struct {
+	XMLName         xml.Name `xml:"ip"`
+	Protocol        string   `xml:"protocol,attr"`
+	SourceAddress   string   `xml:"srcipaddr,attr,omitempty"`
+	TargetPortStart uint64   `xml:"dstportstart,attr,omitempty"`
+	TargetPortEnd   uint64   `xml:"dstportend,attr,omitempty"`
+}
+
+type virNwfilterRule struct {
+	XMLName   xml.Name `xml:"rule"`
+	Action    string   `xml:"action,attr"`
+	Direction string   `xml:"direction,attr"`
+	IPRule    *virNwfilerRuleIP
+}
+
+type virNwfilterRef struct {
+	XMLName xml.Name `xml:"filterref"`
+	Filter  string   `xml:"filter,attr"`
+}
+
+type virNwfilterDefine struct {
+	XMLName   xml.Name `xml:"filter"`
+	Name      string   `xml:"name,attr"`
+	Reference *virNwfilterRef
+	Rules     []virNwfilterRule
+}
+
 const (
 	IDEOffsetCDROM      = iota
 	IDEOffsetCIDATA

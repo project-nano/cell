@@ -1,10 +1,12 @@
 # Change Log
 
-## [1.3.0] - 2020-10-02
+## [1.3.0] - 2020-10-29
 
 ### Added
 
 - Allocate instance address using Cloud-Init
+- Manage security policy of instance
+- Create instance with security policy
  
 ### Changed
 
