@@ -321,6 +321,14 @@ const (
 	USBController          = "usb"
 	ListenAllAddress       = "0.0.0.0"
 	ListenTypeAddress      = "address"
+	NwfilterAccept         = "nano-nwfilter-accept"
+	NwfilterReject         = "nano-nwfilter-reject"
+	NwfilterActionAccept   = "accept"
+	NwfilterActionDrop     = "drop"
+	NwfilterDirectionIn    = "in"
+	NwfilterDirectionOut   = "out"
+	NwfilterDirectionInOut = "inout"
+	NwfilterPrefix         = "nano-nwfilter"
 )
 
 type InstanceUtility struct {
@@ -334,21 +342,47 @@ func CreateInstanceUtility(connect *libvirt.Connect) (util *InstanceUtility, err
 }
 
 func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConfig, err error) {
-	define, err := util.createDefine(config)
-	if err != nil {
-		return guest, err
+	var virDomain *libvirt.Domain
+	var virNwfilter *libvirt.NWFilter
+	defer func() {
+		if nil != err{
+			if nil != virDomain{
+				_ = virDomain.Undefine()
+			}
+			if nil != virNwfilter{
+				_ = virNwfilter.Undefine()
+			}
+		}
+	}()
+	var nwfilterDefine = policyToFilter(config.Security)
+	var xmlData []byte
+	if xmlData, err = xml.MarshalIndent(nwfilterDefine, "", " ");err != nil{
+		err = fmt.Errorf("generae nwfilter define for instance '%s' fail: %s", config.Name, err.Error())
+		return
 	}
-	data, err := xml.MarshalIndent(define, "", " ")
-	if err != nil{
-		return guest, err
+	if virNwfilter, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil{
+		err = fmt.Errorf("create nwfilter for instance '%s' fail: %s", config.Name, err.Error())
+		return
 	}
-	virDomain, err := util.virConnect.DomainDefineXML(string(data))
+	var domainDefine virDomainDefine
+	if domainDefine, err = util.createDefine(config); err != nil {
+		err = fmt.Errorf("create domain define for instance '%s' fail: %s", config.Name, err.Error())
+		return
+	}
+
+	if xmlData, err = xml.MarshalIndent(domainDefine, "", " ");err != nil{
+		err = fmt.Errorf("generete domain define for instance '%s' fail: %s", config.Name, err.Error())
+		return
+	}
+	virDomain, err = util.virConnect.DomainDefineXML(string(xmlData))
 	if err != nil{
-		return guest, err
+		err = fmt.Errorf("create domain for instance '%s' fail: %s", config.Name, err.Error())
+		return
 	}
 	if config.AutoStart{
 		if err = virDomain.SetAutostart(true);err != nil{
-			return guest, err
+			err = fmt.Errorf("enable auto start for instance '%s' fail: %s", config.Name, err.Error())
+			return
 		}
 	}
 	config.Created = true
@@ -356,17 +390,25 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 	return config, nil
 }
 
-func (util *InstanceUtility) DeleteInstance(id string) error {
-	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
+func (util *InstanceUtility) DeleteInstance(id string) (err error) {
+	var virDomain *libvirt.Domain
+	virDomain, err = util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
-		return err
+		return
 	}
-	running, err := virDomain.IsActive()
+	var running bool
+	running, err = virDomain.IsActive()
 	if err != nil {
-		return err
+		return
 	}
 	if running {
 		return fmt.Errorf("instance '%s' is running", id)
+	}
+	var virNwfilter *libvirt.NWFilter
+	if virNwfilter, err = util.virConnect.LookupNWFilterByName(generateNwfilterName(id)); err == nil{
+		if err = virNwfilter.Undefine(); err != nil{
+			return fmt.Errorf("delete nwfilter of instance %s fail: %s", id, err.Error())
+		}
 	}
 	return virDomain.Undefine()
 }
@@ -1070,9 +1112,11 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 		err = fmt.Errorf("unsupported storage mode :%d", config.StorageMode)
 		return
 	}
+	var nwfilterName = generateNwfilterName(config.ID)
 	switch config.NetworkMode {
 	case NetworkModePlain:
-		if err = define.SetPlainNetwork(config.Template.Network, config.NetworkSource, config.HardwareAddress, config.ReceiveSpeed, config.SendSpeed); err != nil {
+		if err = define.SetPlainNetwork(config.Template.Network, config.NetworkSource, config.HardwareAddress, nwfilterName,
+			config.ReceiveSpeed, config.SendSpeed); err != nil {
 			err = fmt.Errorf("set plain network fail: %s", err.Error())
 			return
 		}
@@ -1189,7 +1233,7 @@ func (define *virDomainDefine) SetLocalVolumes(diskBus, pool string, volumes []s
 	return nil
 }
 
-func (define *virDomainDefine) SetPlainNetwork(netBus, bridge, mac string, receiveSpeed, sendSpeed uint64) (err error) {
+func (define *virDomainDefine) SetPlainNetwork(netBus, bridge, mac, filterName string, receiveSpeed, sendSpeed uint64) (err error) {
 	if mac == "" {
 		mac, err = define.generateMacAddress()
 		if err != nil {
@@ -1204,6 +1248,7 @@ func (define *virDomainDefine) SetPlainNetwork(netBus, bridge, mac string, recei
 	i.MAC = &virDomainInterfaceMAC{mac}
 	i.Source = virDomainInterfaceSource{Bridge: bridge}
 	i.Model = &virDomainInterfaceModel{netBus}
+	i.Filter = &virNwfilterRef{Filter: filterName}
 	if 0 != receiveSpeed || 0 != sendSpeed{
 		var bandWidth = virDomainInterfaceBandwidth{}
 		if 0 != receiveSpeed{
@@ -1285,7 +1330,6 @@ func (define *virDomainDefine) Initial() {
 	define.Features.ACPI = &virDomainFeatureACPI{}
 	define.Features.APIC = &virDomainFeatureAPIC{}
 
-
 	define.Clock.Offset = DefaultClockOffset
 
 	define.Devices.MemoryBalloon.Model = MemoryBalloonModel
@@ -1298,4 +1342,36 @@ func (define *virDomainDefine) Initial() {
 		virDomainControllerElement{Type: PCIController, Index: DefaultControllerIndex, Model: DefaultControllerModel},
 		virDomainControllerElement{Type: VirtioSCSIController, Index: DefaultControllerIndex, Model: VirtioSCSIModel}}
 
+}
+
+func policyToFilter(policy *SecurityPolicy) (nwfilter virNwfilterDefine){
+	if nil == policy{
+		//accept by default
+		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterAccept}
+		return
+	}
+	if policy.Accept{
+		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterAccept}
+	}else{
+		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterReject}
+	}
+	for _, rule := range policy.Rules{
+		var virRule = virNwfilterRule{Direction: NwfilterDirectionIn}
+		if rule.Accept{
+			virRule.Action = NwfilterActionAccept
+		}else{
+			virRule.Action = NwfilterActionDrop
+		}
+		virRule.IPRule = &virNwfilerRuleIP{
+			Protocol: string(rule.Protocol),
+			TargetPortStart: uint64(rule.TargetPort),
+			SourceAddress: rule.SourceAddress,
+		}
+		nwfilter.Rules = append(nwfilter.Rules, virRule)
+	}
+	return
+}
+
+func generateNwfilterName(id string) string{
+	return NwfilterPrefix + id
 }
