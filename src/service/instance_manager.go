@@ -327,6 +327,8 @@ type instanceCommand struct {
 	SendSpeed       uint64
 	InstanceList    []string
 	NetworkResource map[string]InstanceNetworkResource
+	Accept          bool
+	Rule            SecurityPolicyRule
 	ResultChan      chan InstanceResult
 	ErrorChan       chan error
 	AllConfigChan   chan []GuestConfig
@@ -371,6 +373,13 @@ const (
 	InsCmdModifyNetworkThreshold
 	InsCmdResetMonitorSecret
 	InsCmdSyncAddressAllocation
+	InsCmdGetSecurityPolicy
+	InsCmdAddSecurityPolicyRule
+	InsCmdModifySecurityPolicyRule
+	InsCmdRemoveSecurityPolicyRule
+	InsCmdChangeDefaultSecurityPolicyAction
+	InsCmdPullUpSecurityPolicyRule
+	InsCmdPushDownSecurityPolicyRule
 	InsCmdInvalid
 )
 
@@ -409,6 +418,13 @@ var instanceCommandNames = []string{
 	"ModifyNetworkThreshold",
 	"ResetMonitorSecret",
 	"SyncAddressAllocation",
+	"GetSecurityPolicy",
+	"AddSecurityPolicyRule",
+	"ModifySecurityPolicyRule",
+	"RemoveSecurityPolicyRule",
+	"ChangeDefaultSecurityPolicyAction",
+	"PullUpSecurityPolicyRule",
+	"PushDownSecurityPolicyRule",
 }
 
 func (c InstanceCommandType) toString() string {
@@ -769,6 +785,35 @@ func (manager *InstanceManager) SyncAddressAllocation(allocationMode string){
 	manager.commands <- instanceCommand{Type: InsCmdSyncAddressAllocation, Allocation: allocationMode}
 }
 
+//Security Policy
+func (manager *InstanceManager) GetSecurityPolicy(instanceID string, respChan chan InstanceResult){
+	manager.commands <- instanceCommand{Type: InsCmdGetSecurityPolicy, ResultChan: respChan}
+}
+
+func (manager *InstanceManager) AddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdAddSecurityPolicyRule, Instance: instanceID, Rule: rule, ErrorChan: respChan}
+}
+
+func (manager *InstanceManager) ModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdModifySecurityPolicyRule, Instance: instanceID, Index: index, Rule: rule, ErrorChan: respChan}
+}
+
+func (manager *InstanceManager) RemoveSecurityPolicyRule(instanceID string, index int, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdRemoveSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
+}
+
+func (manager *InstanceManager) ChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdChangeDefaultSecurityPolicyAction, Instance: instanceID, Accept: accept, ErrorChan: respChan}
+}
+
+func (manager *InstanceManager) PullUpSecurityPolicyRule(instanceID string, index int, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdPullUpSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
+}
+
+func (manager *InstanceManager) PushDownSecurityPolicyRule(instanceID string, index int, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdPushDownSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
+}
+
 type instanceDataConfig struct {
 	Instances   []GuestConfig `json:"instances"`
 	StoragePool string        `json:"storage_pool,omitempty"`
@@ -948,6 +993,20 @@ func (manager *InstanceManager) handleCommand(cmd instanceCommand) {
 		err = manager.handleResetMonitorPassword(cmd.Instance, cmd.ResultChan)
 	case InsCmdSyncAddressAllocation:
 		err = manager.handleSyncAddressAllocation(cmd.Allocation)
+	case InsCmdGetSecurityPolicy:
+		err = manager.handleGetSecurityPolicy(cmd.Instance, cmd.ResultChan)
+	case InsCmdAddSecurityPolicyRule:
+		err = manager.handleAddSecurityPolicyRule(cmd.Instance, cmd.Rule, cmd.ErrorChan)
+	case InsCmdModifySecurityPolicyRule:
+		err = manager.handleModifySecurityPolicyRule(cmd.Instance, cmd.Index, cmd.Rule, cmd.ErrorChan)
+	case InsCmdRemoveSecurityPolicyRule:
+		err = manager.handleRemoveSecurityPolicyRule(cmd.Instance, cmd.Index, cmd.ErrorChan)
+	case InsCmdChangeDefaultSecurityPolicyAction:
+		err = manager.handleChangeDefaultSecurityPolicyAction(cmd.Instance, cmd.Accept, cmd.ErrorChan)
+	case InsCmdPullUpSecurityPolicyRule:
+		err = manager.handlePullUpSecurityPolicyRule(cmd.Instance, cmd.Index, cmd.ErrorChan)
+	case InsCmdPushDownSecurityPolicyRule:
+		err = manager.handlePushDownSecurityPolicyRule(cmd.Instance, cmd.Index, cmd.ErrorChan)
 	default:
 		log.Printf("<instance> unsupported command type %d", cmd.Type)
 	}
@@ -1712,6 +1771,108 @@ func (manager *InstanceManager) handleSyncAddressAllocation(allocationMode strin
 		return manager.saveConfig()
 	}
 	return
+}
+
+//Security Policy
+func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respChan chan InstanceResult) (err error){
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- InstanceResult{Error: err}
+		return
+	}
+	if nil == instance.Security{
+		respChan <- InstanceResult{Policy: SecurityPolicy{Accept: true}}
+	}else{
+		respChan <- InstanceResult{
+			Policy: *instance.Security,
+		}
+	}
+	return nil
+}
+
+func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error) (err error){
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		instance.Security = &SecurityPolicy{Accept: true}
+	}
+	for index, currentRule := range instance.Security.Rules{
+		if currentRule.TargetPort == rule.TargetPort && currentRule.Protocol == rule.Protocol{
+			err = fmt.Errorf("same port&protocol already exists in rule %d of instance %s", index, instance.Name)
+			respChan <- err
+			return
+		}
+	}
+	instance.Security.Rules = append(instance.Security.Rules, rule)
+	manager.instances[instanceID] = instance
+	if rule.Accept{
+		log.Printf("<instance> enabled port %d of instance '%s' on protocol %s", rule.TargetPort, instance.Name, rule.Protocol)
+	}else{
+		log.Printf("<instance> disabled port %d of instance '%s' on protocol %s", rule.TargetPort, instance.Name, rule.Protocol)
+	}
+
+	respChan <- nil
+	return manager.saveConfig()
+}
+
+func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error) (err error){
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		instance.Security = &SecurityPolicy{Accept: true}
+	}
+	if index >= len(instance.Security.Rules){
+		err = fmt.Errorf("invalid rule index %d for instance %s", index, instance.Name)
+		respChan <- err
+		return
+	}
+	for currentIndex, currentRule := range instance.Security.Rules{
+		if currentRule.TargetPort == rule.TargetPort && currentRule.Protocol == rule.Protocol{
+			err = fmt.Errorf("same port&protocol already exists in rule %d of instance %s", currentIndex, instance.Name)
+			respChan <- err
+			return
+		}
+	}
+	instance.Security.Rules[index] = rule
+	manager.instances[instanceID] = instance
+	if rule.Accept{
+		log.Printf("<instance> %dth rule changed to enable port %d of instance '%s' on protocol %s",
+			index, rule.TargetPort, instance.Name, rule.Protocol)
+	}else{
+		log.Printf("<instance> %dth rule changed to disable port %d of instance '%s' on protocol %s",
+			index, rule.TargetPort, instance.Name, rule.Protocol)
+	}
+
+	respChan <- nil
+	return manager.saveConfig()
+}
+
+func (manager *InstanceManager) handleRemoveSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+	panic("not implement")
+}
+
+func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error) (err error){
+	panic("not implement")
+}
+
+func (manager *InstanceManager) handlePullUpSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+	panic("not implement")
+}
+
+func (manager *InstanceManager) handlePushDownSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+	panic("not implement")
 }
 
 func (config *GuestConfig) Marshal(message framework.Message) error {

@@ -259,6 +259,7 @@ type virNwfilterRule struct {
 	XMLName   xml.Name `xml:"rule"`
 	Action    string   `xml:"action,attr"`
 	Direction string   `xml:"direction,attr"`
+	Priority  int      `xml:"priority,attr,omitempty"`
 	IPRule    *virNwfilerRuleIP
 }
 
@@ -321,14 +322,12 @@ const (
 	USBController          = "usb"
 	ListenAllAddress       = "0.0.0.0"
 	ListenTypeAddress      = "address"
-	NwfilterAccept         = "nano-nwfilter-accept"
-	NwfilterReject         = "nano-nwfilter-reject"
 	NwfilterActionAccept   = "accept"
 	NwfilterActionDrop     = "drop"
 	NwfilterDirectionIn    = "in"
 	NwfilterDirectionOut   = "out"
 	NwfilterDirectionInOut = "inout"
-	NwfilterPrefix         = "nano-nwfilter"
+	NwfilterPrefix         = "nano-nwfilter-"
 )
 
 type InstanceUtility struct {
@@ -1345,18 +1344,17 @@ func (define *virDomainDefine) Initial() {
 }
 
 func policyToFilter(policy *SecurityPolicy) (nwfilter virNwfilterDefine){
+	const LowestPriority = 1000
 	if nil == policy{
 		//accept by default
-		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterAccept}
-		return
+		policy = &SecurityPolicy{Accept: true}
 	}
-	if policy.Accept{
-		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterAccept}
-	}else{
-		nwfilter.Reference = &virNwfilterRef{Filter: NwfilterReject}
-	}
+	var prioirty = LowestPriority - len(policy.Rules)
 	for _, rule := range policy.Rules{
-		var virRule = virNwfilterRule{Direction: NwfilterDirectionIn}
+		var virRule = virNwfilterRule{
+			Direction: NwfilterDirectionIn,
+			Priority: prioirty,
+		}
 		if rule.Accept{
 			virRule.Action = NwfilterActionAccept
 		}else{
@@ -1368,7 +1366,18 @@ func policyToFilter(policy *SecurityPolicy) (nwfilter virNwfilterDefine){
 			SourceAddress: rule.SourceAddress,
 		}
 		nwfilter.Rules = append(nwfilter.Rules, virRule)
+		prioirty++
 	}
+	var defaultRule = virNwfilterRule{
+		Direction: NwfilterDirectionIn,
+		Priority: prioirty,
+	}
+	if policy.Accept{
+		defaultRule.Action = NwfilterActionAccept
+	}else{
+		defaultRule.Action = NwfilterActionDrop
+	}
+	nwfilter.Rules = append(nwfilter.Rules, defaultRule)
 	return
 }
 

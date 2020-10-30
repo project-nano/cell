@@ -17,6 +17,7 @@ type InstanceResult struct {
 	Instance         InstanceStatus
 	Password         string
 	User             string
+	Policy           SecurityPolicy
 	NetworkResources map[string]InstanceNetworkResource
 }
 
@@ -70,6 +71,14 @@ type InstanceModule interface {
 	MigrateInstances(instances []string, respChan chan error)
 	ResetMonitorPassword(id string, respChan chan InstanceResult)
 	SyncAddressAllocation(allocationMode string)
+	//Security Policy
+	GetSecurityPolicy(instanceID string, respChan chan InstanceResult)
+	AddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error)
+	ModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error)
+	RemoveSecurityPolicyRule(instanceID string, index int, respChan chan error)
+	ChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error)
+	PullUpSecurityPolicyRule(instanceID string, index int, respChan chan error)
+	PushDownSecurityPolicyRule(instanceID string, index int, respChan chan error)
 }
 
 type SnapshotConfig struct {
