@@ -353,10 +353,10 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 			}
 		}
 	}()
-	var nwfilterDefine = policyToFilter(config.Security)
+	var nwfilterDefine = policyToFilter(generateNwfilterName(config.ID), config.Security)
 	var xmlData []byte
 	if xmlData, err = xml.MarshalIndent(nwfilterDefine, "", " ");err != nil{
-		err = fmt.Errorf("generae nwfilter define for instance '%s' fail: %s", config.Name, err.Error())
+		err = fmt.Errorf("generate nwfilter define for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
 	if virNwfilter, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil{
@@ -1077,6 +1077,18 @@ func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, por
 	return nil
 }
 
+func (util *InstanceUtility) SyncDomainNwfilter(id string, policy *SecurityPolicy) (err error){
+	var filterName = generateNwfilterName(id)
+	var filterDefine = policyToFilter(filterName, policy)
+	var xmlData []byte
+	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil{
+		err = fmt.Errorf("generate nwfilter xml for instance '%s' fail: %s", id, err.Error())
+		return
+	}
+	_, err = util.virConnect.NWFilterDefineXML(string(xmlData))
+	return
+}
+
 func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainDefine, err error) {
 	const (
 		BootDeviceCDROM    = "cdrom"
@@ -1343,12 +1355,13 @@ func (define *virDomainDefine) Initial() {
 
 }
 
-func policyToFilter(policy *SecurityPolicy) (nwfilter virNwfilterDefine){
+func policyToFilter(name string, policy *SecurityPolicy) (nwfilter virNwfilterDefine){
 	const LowestPriority = 1000
 	if nil == policy{
 		//accept by default
 		policy = &SecurityPolicy{Accept: true}
 	}
+	nwfilter.Name = name
 	var prioirty = LowestPriority - len(policy.Rules)
 	for _, rule := range policy.Rules{
 		var virRule = virNwfilterRule{

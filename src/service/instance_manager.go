@@ -1811,6 +1811,11 @@ func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, r
 		}
 	}
 	instance.Security.Rules = append(instance.Security.Rules, rule)
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
 	manager.instances[instanceID] = instance
 	if rule.Accept{
 		log.Printf("<instance> enabled port %d of instance '%s' on protocol %s", rule.TargetPort, instance.Name, rule.Protocol)
@@ -1831,7 +1836,9 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 		return
 	}
 	if nil == instance.Security{
-		instance.Security = &SecurityPolicy{Accept: true}
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
 	}
 	if index >= len(instance.Security.Rules){
 		err = fmt.Errorf("invalid rule index %d for instance %s", index, instance.Name)
@@ -1846,6 +1853,11 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 		}
 	}
 	instance.Security.Rules[index] = rule
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
 	manager.instances[instanceID] = instance
 	if rule.Accept{
 		log.Printf("<instance> %dth rule changed to enable port %d of instance '%s' on protocol %s",
@@ -1860,19 +1872,149 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 }
 
 func (manager *InstanceManager) handleRemoveSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
-	panic("not implement")
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
+	}
+	var ruleCount = len(instance.Security.Rules)
+	if index >= ruleCount{
+		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
+		respChan <- err
+		return
+	}
+	if index == ruleCount - 1 {
+		//last
+		instance.Security.Rules = instance.Security.Rules[:index]
+	}else{
+		instance.Security.Rules = append(instance.Security.Rules[:index], instance.Security.Rules[index + 1:]...)
+	}
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
+	manager.instances[instanceID] = instance
+	log.Printf("<instance> %dth rule removed from instance '%s'", index, instance.Name)
+	respChan <- nil
+	return manager.saveConfig()
 }
 
 func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error) (err error){
-	panic("not implement")
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		instance.Security = &SecurityPolicy{Accept: accept}
+	}else if instance.Security.Accept == accept{
+		err = errors.New("no need to change")
+		respChan <- err
+		return
+	}else{
+		instance.Security.Accept = accept
+	}
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
+	manager.instances[instanceID] = instance
+	if accept{
+		log.Printf("<instance> instance '%s' accept incoming connections by default", instance.Name)
+	}else{
+		log.Printf("<instance> instance '%s' reject incoming connections by default", instance.Name)
+	}
+
+	respChan <- nil
+	return manager.saveConfig()
 }
 
 func (manager *InstanceManager) handlePullUpSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
-	panic("not implement")
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
+	}
+	var ruleCount = len(instance.Security.Rules)
+	if index >= ruleCount{
+		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
+		respChan <- err
+		return
+	}else if 0 == index{
+		err = errors.New("already on top")
+		respChan <- err
+		return
+	}
+	//swap
+	var previous = instance.Security.Rules[index - 1]
+	instance.Security.Rules[index - 1] = instance.Security.Rules[index]
+	instance.Security.Rules[index] = previous
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
+	manager.instances[instanceID] = instance
+	log.Printf("<instance> %dth rule of instance '%s' moved up", index, instance.Name)
+	respChan <- nil
+	return manager.saveConfig()
 }
 
 func (manager *InstanceManager) handlePushDownSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
-	panic("not implement")
+	var instance InstanceStatus
+	var exists bool
+	if instance, exists = manager.instances[instanceID]; !exists{
+		err = fmt.Errorf("invalid instance '%s'", instanceID)
+		respChan <- err
+		return
+	}
+	if nil == instance.Security{
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
+	}
+	var ruleCount = len(instance.Security.Rules)
+	if index >= ruleCount{
+		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
+		respChan <- err
+		return
+	}
+	if ruleCount - 1 == index{
+		err = errors.New("already on bottom")
+		respChan <- err
+		return
+	}
+	//swap
+	var next = instance.Security.Rules[index + 1]
+	instance.Security.Rules[index + 1] = instance.Security.Rules[index]
+	instance.Security.Rules[index] = next
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
+		respChan <- err
+		return
+	}
+	manager.instances[instanceID] = instance
+	log.Printf("<instance> %dth rule of instance '%s' moved down", index, instance.Name)
+	respChan <- nil
+	return manager.saveConfig()
 }
 
 func (config *GuestConfig) Marshal(message framework.Message) error {
