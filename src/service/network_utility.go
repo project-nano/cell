@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/binary"
 	"net"
 	"fmt"
 	"github.com/libvirt/libvirt-go"
@@ -138,4 +139,21 @@ func GetCurrentIPOfDefaultBridge() (ip string, err error){
 		}
 	}
 	return "", fmt.Errorf("no ipv4 address available in %s", DefaultBridgeName)
+}
+
+func UInt32ToIPv4(input uint32) string{
+	if 0 == input{
+		return ""
+	}
+	var bytes = make([]byte, net.IPv4len)
+	binary.BigEndian.PutUint32(bytes, input)
+	return net.IP(bytes).String()
+}
+
+func IPv4ToUInt32(input string) uint32 {
+	if "" == input{
+		return 0
+	}
+	var ip = net.ParseIP(input)
+	return binary.BigEndian.Uint32(ip.To4())
 }

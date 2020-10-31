@@ -207,6 +207,18 @@ const (
 	PolicyRuleProtocolICMP = "icmp"
 )
 
+const (
+	PolicyRuleProtocolIndexTCP  = iota
+	PolicyRuleProtocolIndexUDP
+	PolicyRuleProtocolIndexICMP
+	PolicyRuleProtocolIndexInvalid
+)
+
+const (
+	PolicyRuleActionAccept = iota
+	PolicyRuleActionReject
+)
+
 type SecurityPolicyRule struct {
 	Accept        bool               `json:"accept"`
 	Protocol      PolicyRuleProtocol `json:"protocol"`

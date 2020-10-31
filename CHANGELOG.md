@@ -6,7 +6,7 @@
 
 - Allocate instance address using Cloud-Init
 - Manage security policy of instance
-- Create instance with security policy
+- Create instances with security policy
  
 ### Changed
 

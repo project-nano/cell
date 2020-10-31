@@ -179,5 +179,54 @@ func CreateTransactionManager(sender framework.MessageSender, instanceModule *se
 		err = fmt.Errorf("register change storage path fail: %s", err.Error())
 		return
 	}
+	//security policy
+	if err = manager.RegisterExecutor(framework.GetGuestRuleRequest,
+		&task.GetSecurityPolicyExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register get security policy fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.AddGuestRuleRequest,
+		&task.AddSecurityRuleExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register add security rule fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.ModifyGuestRuleRequest,
+		&task.ModifySecurityRuleExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register modify security rule fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.ChangeGuestRuleDefaultActionRequest,
+		&task.ChangeDefaultSecurityActionExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register change default security action fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.ChangeGuestRuleOrderRequest,
+		&task.ChangeSecurityRuleOrderExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register change security rule order fail: %s", err.Error())
+		return
+	}
+	if err = manager.RegisterExecutor(framework.RemoveGuestRuleRequest,
+		&task.RemoveSecurityRuleExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register remove security rule fail: %s", err.Error())
+		return
+	}
 	return manager, nil
 }

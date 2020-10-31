@@ -90,6 +90,14 @@ func (cell *CellService) OnMessageReceived(msg framework.Message) {
 	case framework.ModifyCellStorageRequest:
 	case framework.AddressPoolChangedEvent:
 
+	//security policy
+	case framework.GetGuestRuleRequest:
+	case framework.AddGuestRuleRequest:
+	case framework.ModifyGuestRuleRequest:
+	case framework.ChangeGuestRuleDefaultActionRequest:
+	case framework.ChangeGuestRuleOrderRequest:
+	case framework.RemoveGuestRuleRequest:
+
 	default:
 		cell.handleIncomingMessage(msg)
 		return

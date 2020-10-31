@@ -151,13 +151,65 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			config.SendSpeed = limitParameters[SendOffset]
 		}
 	}
-
 	log.Printf("[%08X] request create instance '%s' ( id: %s ) from %s.[%08X]", id,
 		config.Name, config.ID, request.GetSender(), request.GetFromSession())
 
 	log.Printf("[%08X] require %d cores, %d MB memory", id, config.Cores, config.Memory>>20)
 	log.Printf("[%08X] IO limit: read %d, write %d per second, network limit: recv %d Kps, send %d Kps",
 		id, config.ReadIOPS, config.WriteIOPS, config.ReceiveSpeed >> 10, config.SendSpeed >> 10)
+
+	//Security Policy
+	{
+		const (
+			validPolicyElementCount = 5//accept,protocol,from,to,port
+			offsetAccept = iota
+			offsetProtocol
+			offsetFrom
+			offsetTo
+			offsetPort
+		)
+		var policy []uint64
+		if policy, err = request.GetUIntArray(framework.ParamKeyPolicy); nil == err{
+			if 0 != len(policy) % validPolicyElementCount{
+				err = fmt.Errorf("invalid policy parameters count %d", len(policy))
+				return
+			}
+			var ruleCount = len(policy) / validPolicyElementCount
+			var securityPolicy service.SecurityPolicy
+			if securityPolicy.Accept, err = request.GetBoolean(framework.ParamKeyAction); err != nil{
+				err = fmt.Errorf("get default security action fail: %s", err.Error())
+				return
+			}
+			for start := 0; start < ruleCount; start += validPolicyElementCount{
+				var rule service.SecurityPolicyRule
+				if service.PolicyRuleActionAccept == policy[start + offsetAccept]{
+					rule.Accept = true
+				}else{
+					rule.Accept = false
+				}
+				switch policy[start + offsetProtocol] {
+				case service.PolicyRuleProtocolIndexTCP:
+					rule.Protocol = service.PolicyRuleProtocolTCP
+				case service.PolicyRuleProtocolIndexUDP:
+					rule.Protocol = service.PolicyRuleProtocolUDP
+				case service.PolicyRuleProtocolIndexICMP:
+					rule.Protocol = service.PolicyRuleProtocolICMP
+				default:
+					err = fmt.Errorf("invalid security protocol index %d", policy[start + offsetProtocol])
+					return
+				}
+				rule.SourceAddress = service.UInt32ToIPv4(uint32(policy[start + offsetFrom]))
+				rule.TargetAddress = service.UInt32ToIPv4(uint32(policy[start + offsetTo]))
+				rule.TargetPort = uint(policy[start + offsetPort])
+				securityPolicy.Rules = append(securityPolicy.Rules, rule)
+			}
+			config.Security = &securityPolicy
+			if ruleCount > 0{
+				log.Printf("[%08X] %d security rule(s) with default accept: %t",
+					id,	len(securityPolicy.Rules), securityPolicy.Accept)
+			}
+		}
+	}
 
 	diskCount := len(diskSize)
 	if 0 == diskCount {
