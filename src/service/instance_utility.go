@@ -271,6 +271,7 @@ type virNwfilterRef struct {
 type virNwfilterDefine struct {
 	XMLName   xml.Name `xml:"filter"`
 	Name      string   `xml:"name,attr"`
+	UUID      string   `xml:"uuid,omitempty"`
 	Reference *virNwfilterRef
 	Rules     []virNwfilterRule
 }
@@ -328,6 +329,7 @@ const (
 	NwfilterDirectionOut   = "out"
 	NwfilterDirectionInOut = "inout"
 	NwfilterPrefix         = "nano-nwfilter-"
+	InterfaceTypeBridge    = "bridge"
 )
 
 type InstanceUtility struct {
@@ -353,7 +355,7 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 			}
 		}
 	}()
-	var nwfilterDefine = policyToFilter(generateNwfilterName(config.ID), config.Security)
+	var nwfilterDefine = policyToFilter(generateNwfilterName(config.ID), config.ID, config.Security)
 	var xmlData []byte
 	if xmlData, err = xml.MarshalIndent(nwfilterDefine, "", " ");err != nil{
 		err = fmt.Errorf("generate nwfilter define for instance '%s' fail: %s", config.Name, err.Error())
@@ -1077,9 +1079,71 @@ func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, por
 	return nil
 }
 
+func (util *InstanceUtility) InitialDomainNwfilter(instanceID string, policy SecurityPolicy) (err error){
+	var filterName = generateNwfilterName(instanceID)
+	var xmlData []byte
+	var xmlString string
+	var filterDefine = policyToFilter(filterName, instanceID, &policy)
+	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil{
+		err = fmt.Errorf("generate nwfilter xml for instance '%s' fail: %s", instanceID, err.Error())
+		return
+	}
+	if _, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil{
+		err = fmt.Errorf("create nwfilter for guest '%s' fail: %s", instanceID, err.Error())
+		return
+	}
+	{
+		var virDomain *libvirt.Domain
+		if virDomain, err = util.virConnect.LookupDomainByUUIDString(instanceID); err != nil{
+			err = fmt.Errorf("invalid guest id '%s'", instanceID)
+			return
+		}
+
+		if xmlString, err = virDomain.GetXMLDesc(0); err != nil{
+			err = fmt.Errorf("get xml of guest '%s' fail: %s", instanceID, err.Error())
+			return
+		}
+		var domainDefine virDomainDefine
+		if err = xml.Unmarshal([]byte(xmlString), &domainDefine); err != nil{
+			err = fmt.Errorf("unmarshal xml of guest '%s' fail: %s", instanceID, err.Error())
+			return
+		}
+		var isActive bool
+		if isActive, err = virDomain.IsActive(); err != nil{
+			err = fmt.Errorf("check running status of guest '%s' fail: %s", instanceID, err.Error())
+			return
+		}
+		var updateFlag = libvirt.DOMAIN_DEVICE_MODIFY_CONFIG
+		if isActive{
+			updateFlag |= libvirt.DOMAIN_DEVICE_MODIFY_LIVE
+		}
+		for _, interfaceDefine := range domainDefine.Devices.Interface{
+			if InterfaceTypeBridge == interfaceDefine.Type{
+				if nil == interfaceDefine.Filter{
+					var deviceWithFilter = interfaceDefine
+					deviceWithFilter.Filter = &virNwfilterRef{
+						Filter:  filterName,
+					}
+					if xmlData, err = xml.MarshalIndent(deviceWithFilter, "", " "); err != nil{
+						err = fmt.Errorf("marshal interface device of guest '%s' fail: %s", instanceID, err.Error())
+						return
+					}
+					xmlString = string(xmlData)
+					if err = virDomain.UpdateDeviceFlags(xmlString, updateFlag); err != nil{
+						err = fmt.Errorf("update nwfilter to interface of guest '%s' fail: %s", instanceID, err.Error())
+					}
+				}
+			}
+		}
+	}
+
+
+	return
+}
+
 func (util *InstanceUtility) SyncDomainNwfilter(id string, policy *SecurityPolicy) (err error){
 	var filterName = generateNwfilterName(id)
-	var filterDefine = policyToFilter(filterName, policy)
+	var filterDefine = policyToFilter(filterName, id, policy)
 	var xmlData []byte
 	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil{
 		err = fmt.Errorf("generate nwfilter xml for instance '%s' fail: %s", id, err.Error())
@@ -1251,9 +1315,6 @@ func (define *virDomainDefine) SetPlainNetwork(netBus, bridge, mac, filterName s
 			return err
 		}
 	}
-	const (
-		InterfaceTypeBridge = "bridge"
-	)
 	var i = virDomainInterfaceElement{}
 	i.Type = InterfaceTypeBridge
 	i.MAC = &virDomainInterfaceMAC{mac}
@@ -1355,18 +1416,19 @@ func (define *virDomainDefine) Initial() {
 
 }
 
-func policyToFilter(name string, policy *SecurityPolicy) (nwfilter virNwfilterDefine){
+func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfilterDefine){
 	const LowestPriority = 1000
 	if nil == policy{
 		//accept by default
 		policy = &SecurityPolicy{Accept: true}
 	}
 	nwfilter.Name = name
-	var prioirty = LowestPriority - len(policy.Rules)
+	nwfilter.UUID = uuid
+	var priority = LowestPriority - len(policy.Rules)
 	for _, rule := range policy.Rules{
 		var virRule = virNwfilterRule{
 			Direction: NwfilterDirectionIn,
-			Priority: prioirty,
+			Priority:  priority,
 		}
 		if rule.Accept{
 			virRule.Action = NwfilterActionAccept
@@ -1379,11 +1441,11 @@ func policyToFilter(name string, policy *SecurityPolicy) (nwfilter virNwfilterDe
 			SourceAddress: rule.SourceAddress,
 		}
 		nwfilter.Rules = append(nwfilter.Rules, virRule)
-		prioirty++
+		priority++
 	}
 	var defaultRule = virNwfilterRule{
 		Direction: NwfilterDirectionIn,
-		Priority: prioirty,
+		Priority:  priority,
 	}
 	if policy.Accept{
 		defaultRule.Action = NwfilterActionAccept

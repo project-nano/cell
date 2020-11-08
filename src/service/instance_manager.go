@@ -799,7 +799,7 @@ func (manager *InstanceManager) SyncAddressAllocation(allocationMode string){
 
 //Security Policy
 func (manager *InstanceManager) GetSecurityPolicy(instanceID string, respChan chan InstanceResult){
-	manager.commands <- instanceCommand{Type: InsCmdGetSecurityPolicy, ResultChan: respChan}
+	manager.commands <- instanceCommand{Type: InsCmdGetSecurityPolicy, Instance: instanceID, ResultChan: respChan}
 }
 
 func (manager *InstanceManager) AddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error){
@@ -1795,11 +1795,20 @@ func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respC
 		return
 	}
 	if nil == instance.Security{
-		respChan <- InstanceResult{Policy: SecurityPolicy{Accept: true}}
-	}else{
-		respChan <- InstanceResult{
-			Policy: *instance.Security,
+		var policy = SecurityPolicy{Accept: true}
+		if err = manager.util.InitialDomainNwfilter(instanceID, policy); err != nil{
+			err = fmt.Errorf("initial nwfilter for guest '%s' fail: %s", err.Error())
+			respChan <- InstanceResult{Error: err}
+			return
 		}
+		instance.Security = &policy
+		manager.instances[instanceID] = instance
+		log.Printf("<instance> initial nwfilter for guest '%s' with default action: accept", instance.Name)
+		respChan <- InstanceResult{Policy: policy}
+		return manager.saveConfig()
+	}
+	respChan <- InstanceResult{
+		Policy: *instance.Security,
 	}
 	return nil
 }
@@ -1813,11 +1822,17 @@ func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, r
 		return
 	}
 	if nil == instance.Security{
-		instance.Security = &SecurityPolicy{Accept: true}
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
 	}
-	for index, currentRule := range instance.Security.Rules{
-		if currentRule.TargetPort == rule.TargetPort && currentRule.Protocol == rule.Protocol{
-			err = fmt.Errorf("same port&protocol already exists in rule %d of instance %s", index, instance.Name)
+	for currentIndex, currentRule := range instance.Security.Rules{
+		if currentRule.TargetPort == rule.TargetPort &&
+			currentRule.Protocol == rule.Protocol &&
+			currentRule.SourceAddress == rule.SourceAddress &&
+			currentRule.TargetAddress == rule.TargetAddress{
+			err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
+				rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
 			respChan <- err
 			return
 		}
@@ -1830,9 +1845,11 @@ func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, r
 	}
 	manager.instances[instanceID] = instance
 	if rule.Accept{
-		log.Printf("<instance> enabled port %d of instance '%s' on protocol %s", rule.TargetPort, instance.Name, rule.Protocol)
+		log.Printf("<instance> %s:%s->%s:%d enabled on instance '%s'",
+			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}else{
-		log.Printf("<instance> disabled port %d of instance '%s' on protocol %s", rule.TargetPort, instance.Name, rule.Protocol)
+		log.Printf("<instance> %s:%s->%s:%d disabled on instance '%s'",
+			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}
 
 	respChan <- nil
@@ -1858,8 +1875,12 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 		return
 	}
 	for currentIndex, currentRule := range instance.Security.Rules{
-		if currentRule.TargetPort == rule.TargetPort && currentRule.Protocol == rule.Protocol{
-			err = fmt.Errorf("same port&protocol already exists in rule %d of instance %s", currentIndex, instance.Name)
+		if currentRule.TargetPort == rule.TargetPort &&
+			currentRule.Protocol == rule.Protocol &&
+			currentRule.SourceAddress == rule.SourceAddress &&
+			currentRule.TargetAddress == rule.TargetAddress{
+			err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
+				rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
 			respChan <- err
 			return
 		}
@@ -1872,11 +1893,11 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 	}
 	manager.instances[instanceID] = instance
 	if rule.Accept{
-		log.Printf("<instance> %dth rule changed to enable port %d of instance '%s' on protocol %s",
-			index, rule.TargetPort, instance.Name, rule.Protocol)
+		log.Printf("<instance> %s:%s->%s:%d enabled on instance '%s'",
+			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}else{
-		log.Printf("<instance> %dth rule changed to disable port %d of instance '%s' on protocol %s",
-			index, rule.TargetPort, instance.Name, rule.Protocol)
+		log.Printf("<instance> %s:%s->%s:%d disabled on instance '%s'",
+			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}
 
 	respChan <- nil
@@ -1928,7 +1949,9 @@ func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instance
 		return
 	}
 	if nil == instance.Security{
-		instance.Security = &SecurityPolicy{Accept: accept}
+		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
+		respChan <- err
+		return
 	}else if instance.Security.Accept == accept{
 		err = errors.New("no need to change")
 		respChan <- err
