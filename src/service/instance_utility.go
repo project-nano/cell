@@ -1424,7 +1424,14 @@ func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfi
 	}
 	nwfilter.Name = name
 	nwfilter.UUID = uuid
-	var priority = LowestPriority - len(policy.Rules)
+	var priority = LowestPriority - len(policy.Rules) - 1
+	var outRule = virNwfilterRule{
+		Direction: NwfilterDirectionOut,
+		Priority: priority,
+		Action: NwfilterActionAccept,
+	}
+	nwfilter.Rules = append(nwfilter.Rules, outRule)
+	priority++
 	for _, rule := range policy.Rules{
 		var virRule = virNwfilterRule{
 			Direction: NwfilterDirectionIn,

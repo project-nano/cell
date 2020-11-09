@@ -1879,10 +1879,20 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 			currentRule.Protocol == rule.Protocol &&
 			currentRule.SourceAddress == rule.SourceAddress &&
 			currentRule.TargetAddress == rule.TargetAddress{
-			err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
-				rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
-			respChan <- err
-			return
+			if index == currentIndex{
+				if rule.Accept == currentRule.Accept{
+					err = errors.New("no need to change")
+					respChan <- err
+					return
+				}
+			}else{
+				err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
+					rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
+				respChan <- err
+				return
+			}
+
+
 		}
 	}
 	instance.Security.Rules[index] = rule
