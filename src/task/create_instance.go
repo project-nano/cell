@@ -20,46 +20,57 @@ type CreateInstanceExecutor struct {
 
 func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request framework.Message,
 	incoming chan framework.Message, terminate chan bool) (err error) {
+	resp, _ := framework.CreateJsonMessage(framework.CreateGuestResponse)
+	resp.SetFromSession(id)
+	resp.SetToSession(request.GetFromSession())
+	resp.SetSuccess(false)
+
 	var config = service.GuestConfig{}
 	config.Initialized = false
 	//full name: group.instanceName
 	if config.Name, err = request.GetString(framework.ParamKeyName); err != nil {
-		return err
+		err = fmt.Errorf("get name fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	if config.ID, err = request.GetString(framework.ParamKeyInstance); err != nil {
-		return err
+		err = fmt.Errorf("get id fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	if config.User, err = request.GetString(framework.ParamKeyUser); err != nil {
-		return err
+		err = fmt.Errorf("get user fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	if config.Group, err = request.GetString(framework.ParamKeyGroup); err != nil {
-		return err
+		err = fmt.Errorf("get group fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 
 	if config.Cores, err = request.GetUInt(framework.ParamKeyCore); err != nil {
-		return err
+		err = fmt.Errorf("get cores fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 
 	if config.Memory, err = request.GetUInt(framework.ParamKeyMemory); err != nil {
-		return err
+		err = fmt.Errorf("get memory fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	var diskSize []uint64
 	if diskSize, err = request.GetUIntArray(framework.ParamKeyDisk); err != nil {
-		return err
+		err = fmt.Errorf("get disk size fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	if config.AutoStart, err = request.GetBoolean(framework.ParamKeyOption); err != nil {
-		return err
+		err = fmt.Errorf("get auto start flag fail: %s", err.Error())
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
-	//config.System, _ = request.GetString(framework.ParamKeySystem)
-	//config.SystemVersion, _ = request.GetString(framework.ParamKeyVersion)
 	if config.AuthUser, err = request.GetString(framework.ParamKeyAdmin); err != nil{
 		err = fmt.Errorf("get admin name fail: %s", err.Error())
-		return
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	var templateOptions []uint64
 	if templateOptions, err = request.GetUIntArray(framework.ParamKeyTemplate); err != nil{
 		err = fmt.Errorf("get template fail: %s", err.Error())
-		return
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}else{
 		const (
 			OptionOffsetOS = iota
@@ -73,7 +84,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		)
 		if ValidOptionCount != len(templateOptions){
 			err = fmt.Errorf("template options count mismatch %d / %d", len(templateOptions), ValidOptionCount)
-			return
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		var t = service.HardwareTemplate{
 			OperatingSystem: service.TemplateOperatingSystem(templateOptions[OptionOffsetOS]).ToString(),
@@ -105,13 +116,16 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	if imageID, err = request.GetString(framework.ParamKeyImage); err == nil {
 		cloneFromImage = true
 		if mediaHost, err = request.GetString(framework.ParamKeyHost); err != nil {
-			return err
+			err = fmt.Errorf("get media host fail: %s", err.Error())
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		if mediaPort, err = request.GetUInt(framework.ParamKeyPort); err != nil {
-			return err
+			err = fmt.Errorf("get media port fail: %s", err.Error())
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		if imageSize, err = request.GetUInt(framework.ParamKeySize); err != nil {
-			return err
+			err = fmt.Errorf("get image size fail: %s", err.Error())
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 	}
 	if assignedAddress, err := request.GetStringArray(framework.ParamKeyAddress); err == nil{
@@ -119,7 +133,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			ValidAssignedLength = 2
 		)
 		if len(assignedAddress) != ValidAssignedLength{
-			return fmt.Errorf("unexpect assigned addresses count %d", len(assignedAddress))
+			err = fmt.Errorf("unexpect assigned addresses count %d", len(assignedAddress))
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		config.InternalAddress = assignedAddress[0]
 		config.ExternalAddress = assignedAddress[1]
@@ -141,7 +156,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 
 			if ValidLimitParametersCount != len(limitParameters){
 				err = fmt.Errorf("invalid QoS parameters count %d", len(limitParameters))
-				return err
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			config.ReadSpeed = limitParameters[ReadSpeedOffset]
 			config.WriteSpeed = limitParameters[WriteSpeedOffset]
@@ -161,33 +176,34 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	//Security Policy
 	{
 		const (
-			validPolicyElementCount = 5//accept,protocol,from,to,port
 			offsetAccept = iota
 			offsetProtocol
 			offsetFrom
 			offsetTo
 			offsetPort
+			validPolicyElementCount = 5//accept,protocol,from,to,port
 		)
-		var policy []uint64
-		if policy, err = request.GetUIntArray(framework.ParamKeyPolicy); nil == err{
-			if 0 != len(policy) % validPolicyElementCount{
-				err = fmt.Errorf("invalid policy parameters count %d", len(policy))
-				return
+		var policyParameters []uint64
+		if policyParameters, err = request.GetUIntArray(framework.ParamKeyPolicy); nil == err{
+			if 0 != len(policyParameters) % validPolicyElementCount{
+				err = fmt.Errorf("invalid policy parameters count %d", len(policyParameters))
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
-			var ruleCount = len(policy) / validPolicyElementCount
+			var parameterCount = len(policyParameters)
+			var ruleCount = parameterCount / validPolicyElementCount
 			var securityPolicy service.SecurityPolicy
 			if securityPolicy.Accept, err = request.GetBoolean(framework.ParamKeyAction); err != nil{
 				err = fmt.Errorf("get default security action fail: %s", err.Error())
-				return
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
-			for start := 0; start < ruleCount; start += validPolicyElementCount{
+			for start := 0; start < parameterCount; start += validPolicyElementCount{
 				var rule service.SecurityPolicyRule
-				if service.PolicyRuleActionAccept == policy[start + offsetAccept]{
+				if service.PolicyRuleActionAccept == policyParameters[start + offsetAccept]{
 					rule.Accept = true
 				}else{
 					rule.Accept = false
 				}
-				switch policy[start + offsetProtocol] {
+				switch policyParameters[start + offsetProtocol] {
 				case service.PolicyRuleProtocolIndexTCP:
 					rule.Protocol = service.PolicyRuleProtocolTCP
 				case service.PolicyRuleProtocolIndexUDP:
@@ -195,13 +211,16 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				case service.PolicyRuleProtocolIndexICMP:
 					rule.Protocol = service.PolicyRuleProtocolICMP
 				default:
-					err = fmt.Errorf("invalid security protocol index %d", policy[start + offsetProtocol])
-					return
+					err = fmt.Errorf("invalid security protocol index %d", policyParameters[start + offsetProtocol])
+					return executor.ResponseFail(resp, err.Error(), request.GetSender())
 				}
-				rule.SourceAddress = service.UInt32ToIPv4(uint32(policy[start + offsetFrom]))
-				rule.TargetAddress = service.UInt32ToIPv4(uint32(policy[start + offsetTo]))
-				rule.TargetPort = uint(policy[start + offsetPort])
+				rule.SourceAddress = service.UInt32ToIPv4(uint32(policyParameters[start + offsetFrom]))
+				rule.TargetAddress = service.UInt32ToIPv4(uint32(policyParameters[start + offsetTo]))
+				rule.TargetPort = uint(policyParameters[start + offsetPort])
 				securityPolicy.Rules = append(securityPolicy.Rules, rule)
+				//log.Printf("[%08X] debug: policy parameters %d, %d, %d, %d, %d",
+				//	id, policyParameters[start + offsetAccept], policyParameters[start + offsetProtocol], policyParameters[start + offsetFrom],
+				//	policyParameters[start + offsetTo], policyParameters[start + offsetPort])
 			}
 			config.Security = &securityPolicy
 			if ruleCount > 0{
@@ -213,7 +232,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 
 	diskCount := len(diskSize)
 	if 0 == diskCount {
-		return errors.New("must specify disk size")
+		err = errors.New("must specify disk size")
+		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	var systemSize = diskSize[0]
 	log.Printf("[%08X] system disk %d GB", id, systemSize>>30)
@@ -231,10 +251,6 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	log.Printf("[%08X] network mode %d, storage mode %d, auto start : %t", id,
 		config.NetworkMode, config.StorageMode, config.AutoStart)
 
-	resp, _ := framework.CreateJsonMessage(framework.CreateGuestResponse)
-	resp.SetFromSession(id)
-	resp.SetToSession(request.GetFromSession())
-	resp.SetSuccess(false)
 	log.Printf("[%08X] operating system type: %s, admin name '%s'", id, config.Template.OperatingSystem, config.AuthUser)
 
 	{
@@ -248,9 +264,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		for _, moduleName := range modules {
 			if _, exists := ValidModules[moduleName]; !exists {
 				err = fmt.Errorf("invalid module '%s'", moduleName)
-				resp.SetError(err.Error())
 				log.Printf("[%08X] verify modules fail: %s", id, err.Error())
-				return executor.Sender.SendMessage(resp, request.GetSender())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			} else if ModuleQEMU == moduleName {
 				config.QEMUAvailable = true
 				log.Printf("[%08X] qemu module available", id)
@@ -273,13 +288,13 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			)
 			flags, err := request.GetUIntArray(framework.ParamKeyFlag)
 			if err != nil {
-				return err
+				err = fmt.Errorf("get flags fail: %s", err.Error())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			if ValidFlagLength != len(flags) {
 				err = fmt.Errorf("invalid flags count %d", len(flags))
-				resp.SetError(err.Error())
 				log.Printf("[%08X] verify flags fail: %s", id, err.Error())
-				return executor.Sender.SendMessage(resp, request.GetSender())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			if RootLoginEnabled == flags[LoginEnableFlag] {
 				config.RootLoginEnabled = true
@@ -298,7 +313,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 
 			password, err := request.GetString(framework.ParamKeySecret)
 			if err != nil {
-				return err
+				err = fmt.Errorf("get user password fail: %s", err.Error())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 
 			if 0 == len(password) {
@@ -308,7 +324,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			config.AuthSecret = password
 			config.DataPath, err = request.GetString(framework.ParamKeyPath)
 			if err != nil {
-				return err
+				err = fmt.Errorf("get data path fail: %s", err.Error())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			if "" == config.DataPath {
 				config.DataPath = DefaultDataPath
@@ -322,7 +339,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		if "" == config.HardwareAddress {
 			mac, err := executor.generateMacAddress()
 			if err != nil {
-				return err
+				err = fmt.Errorf("get MAC address fail: %s", err.Error())
+				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			config.HardwareAddress = mac
 			log.Printf("[%08X] mac '%s' generated", id, mac)
@@ -337,9 +355,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				result := <-respChan
 				if result.Error != nil {
 					err = result.Error
-					resp.SetError(err.Error())
 					log.Printf("[%08X] get default bridge fail: %s", id, err.Error())
-					return executor.Sender.SendMessage(resp, request.GetSender())
+					return executor.ResponseFail(resp, err.Error(), request.GetSender())
 				}
 				config.NetworkSource = result.Name
 				config.AddressAllocation = result.Allocation
@@ -353,9 +370,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				result := <-respChan
 				if result.Error != nil {
 					err = result.Error
-					resp.SetError(err.Error())
 					log.Printf("[%08X] allocate monitor port fail: %s", id, err.Error())
-					return executor.Sender.SendMessage(resp, request.GetSender())
+					return executor.ResponseFail(resp, err.Error(), request.GetSender())
 				}
 				config.MonitorPort = uint(result.MonitorPort)
 				log.Printf("[%08X] monitor port %d allocated", id, config.MonitorPort)
@@ -363,7 +379,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 
 			break
 		default:
-			return fmt.Errorf("unsupported network mode %d", config.NetworkMode)
+			err = fmt.Errorf("unsupported network mode %d", config.NetworkMode)
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 
 	}
@@ -384,8 +401,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			err = result.Error
 			log.Printf("[%08X] create volumes fail: %s", id, err.Error())
 			executor.ReleaseResource(id, config.ID, true, false, false)
-			resp.SetError(err.Error())
-			return executor.Sender.SendMessage(resp, request.GetSender())
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		config.StoragePool = result.Pool
 		config.StorageVolumes = result.Volumes
@@ -402,12 +418,11 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		)
 		config.MonitorSecret = executor.generatePassword(MonitorSecretLength)
 		executor.InstanceModule.CreateInstance(config, errChan)
-		err = <-errChan
+		err = <- errChan
 		if err != nil {
-			resp.SetError(err.Error())
 			executor.ReleaseResource(id, config.ID, true, true, false)
 			log.Printf("[%08X] create instance fail: %s", id, err.Error())
-			return executor.Sender.SendMessage(resp, request.GetSender())
+			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		//send create response
 		resp.SetString(framework.ParamKeyInstance, config.ID)
@@ -455,9 +470,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				if err != nil {
 					log.Printf("[%08X] start disk image cloning fail: %s", id, err.Error())
 					executor.ReleaseResource(id, config.ID, true, true, true)
-					event.SetSuccess(false)
-					event.SetError(err.Error())
-					return executor.Sender.SendMessage(event, request.GetSender())
+					return executor.ResponseFail(event, err.Error(), request.GetSender())
 				}
 				log.Printf("[%08X] disk image cloning started", id)
 
@@ -465,9 +478,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				//wait start timeout
 				err = errors.New("start clone disk image timeout")
 				executor.ReleaseResource(id, config.ID, true, true, true)
-				event.SetSuccess(false)
-				event.SetError(err.Error())
-				return executor.Sender.SendMessage(event, request.GetSender())
+				return executor.ResponseFail(event, err.Error(), request.GetSender())
 			}
 		}
 
@@ -486,9 +497,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 					err = errors.New("timeout")
 					log.Printf("[%08X] clone disk image fail: %s", id, err.Error())
 					executor.ReleaseResource(id, config.ID, true, true, true)
-					event.SetSuccess(false)
-					event.SetError(err.Error())
-					return executor.Sender.SendMessage(event, request.GetSender())
+					return executor.ResponseFail(event, err.Error(), request.GetSender())
 				}
 			case progress := <-progressChan:
 				latestUpdate = time.Now()
@@ -501,10 +510,8 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				err = result.Error
 				if err != nil {
 					log.Printf("[%08X] clone disk image fail: %s", id, err.Error())
-					event.SetSuccess(false)
-					event.SetError(err.Error())
 					executor.ReleaseResource(id, config.ID, true, true, true)
-					return executor.Sender.SendMessage(event, request.GetSender())
+					return executor.ResponseFail(event, err.Error(), request.GetSender())
 				}
 				log.Printf("[%08X] clone disk image success, %d MB in size", id, result.Size>>20)
 				//notify guest created
@@ -609,4 +616,10 @@ func (executor *CreateInstanceExecutor) generatePassword(length int) string {
 		result[i] = Letters[executor.RandomGenerator.Intn(n)]
 	}
 	return string(result)
+}
+
+func (executor *CreateInstanceExecutor)ResponseFail(resp framework.Message, err , target string) error{
+	resp.SetSuccess(false)
+	resp.SetError(err)
+	return executor.Sender.SendMessage(resp, target)
 }
