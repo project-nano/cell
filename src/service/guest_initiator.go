@@ -177,6 +177,12 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 			err = fmt.Errorf(" invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
 			return
 		}
+		var netmask string
+		if netmask, err = ipv4MaskToString(internalMask.Mask); err != nil{
+			err = fmt.Errorf("convert netmask fail: %s", err.Error())
+			log.Printf("<initiator> generate meta for guest '%s' fail: %s", ins.Name, err.Error())
+			return
+		}
 		//network-interfaces: |
 		//iface eth0 inet static
 		//address 192.168.1.10
@@ -184,12 +190,23 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 		//netmask 255.255.255.0
 		//broadcast 192.168.1.255
 		//gateway 192.168.1.254
-		fmt.Fprint(w, "network-interfaces: |\niface eth0 inet static\n")
-		fmt.Fprintf(w, "address %s\n", internalIP.String())
-		fmt.Fprintf(w, "network %s\n", internalMask.IP.String())
-		fmt.Fprintf(w, "netmask %s\n", internalMask.Mask.String())
-		fmt.Fprintf(w, "gateway %s\n", gatewayIP)
+		//dns-nameservers xxx.xxx.xxx
+		fmt.Fprint(w, "network-interfaces: |\n\tiface eth0 inet static\n")
+		fmt.Fprintf(w, "\taddress %s\n", internalIP.String())
+		fmt.Fprintf(w, "\tnetwork %s\n", internalMask.IP.String())
+		fmt.Fprintf(w, "\tnetmask %s\n", netmask)
+		fmt.Fprintf(w, "\tgateway %s\n", gatewayIP)
+		fmt.Fprintf(w, "\tdns-nameservers %s\n", strings.Join(result.DNS, " "))
 	}
+}
+
+func ipv4MaskToString(mask net.IPMask) (s string, err error){
+	if net.IPv4len != len(mask){
+		err = fmt.Errorf("invalid mask length %d", len(mask))
+		return
+	}
+	s = fmt.Sprintf("%d.%d.%d.%d", mask[0], mask[1], mask[2], mask[3])
+	return
 }
 
 func (initiator *GuestInitiator) getUserData(w http.ResponseWriter, r *http.Request, params httprouter.Params)  {
