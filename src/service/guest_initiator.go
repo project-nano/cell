@@ -170,19 +170,19 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		var gatewayIP = result.Gateway
-		var internalIP net.IP
-		var internalMask *net.IPNet
-		if internalIP, internalMask, err = net.ParseCIDR(ins.InternalAddress); err != nil{
-			log.Printf("<initiator> invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
-			err = fmt.Errorf(" invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
-			return
-		}
-		var netmask string
-		if netmask, err = ipv4MaskToString(internalMask.Mask); err != nil{
-			err = fmt.Errorf("convert netmask fail: %s", err.Error())
-			log.Printf("<initiator> generate meta for guest '%s' fail: %s", ins.Name, err.Error())
-			return
-		}
+		//var internalIP net.IP
+		//var internalMask *net.IPNet
+		//if internalIP, internalMask, err = net.ParseCIDR(ins.InternalAddress); err != nil{
+		//	log.Printf("<initiator> invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
+		//	err = fmt.Errorf(" invalid internal address '%s' allocated for guest '%s'", ins.InternalAddress, ins.Name)
+		//	return
+		//}
+		//var netmask string
+		//if netmask, err = ipv4MaskToString(internalMask.Mask); err != nil{
+		//	err = fmt.Errorf("convert netmask fail: %s", err.Error())
+		//	log.Printf("<initiator> generate meta for guest '%s' fail: %s", ins.Name, err.Error())
+		//	return
+		//}
 		//network-interfaces: |
 		//iface eth0 inet static
 		//address 192.168.1.10
@@ -191,12 +191,41 @@ func (initiator *GuestInitiator) getMetaData(w http.ResponseWriter, r *http.Requ
 		//broadcast 192.168.1.255
 		//gateway 192.168.1.254
 		//dns-nameservers xxx.xxx.xxx
-		fmt.Fprint(w, "network-interfaces: |\n\tiface eth0 inet static\n")
-		fmt.Fprintf(w, "\taddress %s\n", internalIP.String())
-		fmt.Fprintf(w, "\tnetwork %s\n", internalMask.IP.String())
-		fmt.Fprintf(w, "\tnetmask %s\n", netmask)
-		fmt.Fprintf(w, "\tgateway %s\n", gatewayIP)
-		fmt.Fprintf(w, "\tdns-nameservers %s\n", strings.Join(result.DNS, " "))
+		//fmt.Fprint(w, "network-interfaces: |\niface eth0 inet static\n")
+		//fmt.Fprintf(w, "address %s\n", internalIP.String())
+		//fmt.Fprintf(w, "network %s\n", internalMask.IP.String())
+		//fmt.Fprintf(w, "netmask %s\n", netmask)
+		//fmt.Fprintf(w, "gateway %s\n", gatewayIP)
+		//fmt.Fprintf(w, "dns-nameservers %s\n", strings.Join(result.DNS, " "))
+		
+		//
+		//network:
+		//  version: 1
+		//  config:
+		//	- type: physical
+		//	  name: eth0
+		//	  mac_address: '00:11:22:33:44:55'
+		//	  subnets:
+		//		 - type: static
+		//		   address: 192.168.23.14/24
+		//		   gateway: 192.168.23.1
+		//  - type: nameserver
+		//	  address:
+		//		- 192.168.23.2
+		//		- 8.8.8.8
+		fmt.Fprint(w, "network:\n  version: 1\n  config:\n")
+		fmt.Fprint(w, "  - type: physical\n")
+		fmt.Fprint(w, "    name: eth0\n")
+		fmt.Fprintf(w, "    mac_address: '%s'\n", ins.HardwareAddress)
+		fmt.Fprint(w, "    subnets:\n")
+		fmt.Fprint(w, "      - type: static\n")
+		fmt.Fprintf(w, "        address: %s\n", ins.InternalAddress)
+		fmt.Fprintf(w, "        gateway: %s\n", gatewayIP)
+		fmt.Fprint(w, "  - type: nameserver\n")
+		fmt.Fprint(w, "    address:\n")
+		for _, dns := range result.DNS{
+			fmt.Fprintf(w, "      - %s\n", dns)
+		}
 	}
 }
 
