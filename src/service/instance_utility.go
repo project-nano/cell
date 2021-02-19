@@ -823,6 +823,32 @@ func (util *InstanceUtility) ModifyPassword(id, user, password string) (err erro
 	return err
 }
 
+func (util *InstanceUtility) ModifyAutoStart(guestID string, enable bool) (err error){
+	var virDomain *libvirt.Domain
+	if virDomain, err = util.virConnect.LookupDomainByUUIDString(guestID); err != nil {
+		err = fmt.Errorf("get guest fail: %s", err.Error())
+		return
+	}
+	var current bool
+	if current, err = virDomain.GetAutostart(); err != nil{
+		err = fmt.Errorf("check auto start status fail: %s", err.Error())
+		return
+	}
+	if current == enable{
+		if current{
+			err = fmt.Errorf("auto start of guest '%s' already enabled", guestID)
+		}else{
+			err = fmt.Errorf("auto start of guest '%s' already disabled", guestID)
+		}
+		return
+	}
+	if err = virDomain.SetAutostart(enable); err != nil{
+		err = fmt.Errorf("set auto start fail: %s", err.Error())
+		return
+	}
+	return
+}
+
 func (util *InstanceUtility) SetCPUThreshold(guestID string, priority PriorityEnum) (err error){
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(guestID)
 	if err != nil {

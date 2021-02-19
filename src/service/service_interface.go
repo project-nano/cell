@@ -49,6 +49,7 @@ type InstanceModule interface {
 	ModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error)
 	ModifyDiskThreshold(guestID string, readSpeed, readIOPS, writeSpeed, writeIOPS uint64, resp chan error)
 	ModifyNetworkThreshold(guestID string, receive, send uint64, resp chan error)
+	ModifyAutoStart(guestID string, enable bool, respChan chan error)
 
 	ModifyGuestAuth(id, password, usr string, resp chan InstanceResult)
 	GetGuestAuth(id string, resp chan InstanceResult)

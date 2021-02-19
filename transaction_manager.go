@@ -228,5 +228,13 @@ func CreateTransactionManager(sender framework.MessageSender, instanceModule *se
 		err = fmt.Errorf("register remove security rule fail: %s", err.Error())
 		return
 	}
+	if err = manager.RegisterExecutor(framework.ModifyAutoStartRequest,
+		&task.ModifyAutoStartExecutor{
+			Sender:  sender,
+			InstanceModule: instanceModule,
+		}); err != nil{
+		err = fmt.Errorf("register modify auto start fail: %s", err.Error())
+		return
+	}
 	return manager, nil
 }

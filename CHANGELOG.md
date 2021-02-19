@@ -1,5 +1,11 @@
 # Change Log
 
+## [1.3.1] - 2021-02-19
+
+### Added
+
+- Set auto start
+
 ## [1.3.0] - 2020-10-29
 
 ### Added

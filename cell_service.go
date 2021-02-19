@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	CurrentVersion = "1.3.0"
+	CurrentVersion = "1.3.1"
 )
 
 type CellService struct {
@@ -70,6 +70,7 @@ func (cell *CellService) OnMessageReceived(msg framework.Message) {
 	case framework.ModifyNetworkThresholdRequest:
 	case framework.ModifyAuthRequest:
 	case framework.ModifyGuestNameRequest:
+	case framework.ModifyAutoStartRequest:
 	case framework.GetAuthRequest:
 	case framework.ResizeDiskRequest:
 	case framework.ShrinkDiskRequest:

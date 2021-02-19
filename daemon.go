@@ -10,6 +10,7 @@ import (
 	"github.com/project-nano/sonar"
 	"github.com/vishvananda/netlink"
 	"io/ioutil"
+	"log"
 	"net"
 	"os"
 	"os/exec"
@@ -364,5 +365,6 @@ func migrateInterfaceConfig(bridgeName string, ifcfg, brcfg *InterfaceConfig) (e
 }
 
 func main() {
+	log.SetFlags(log.Ldate | log.Lmicroseconds)
 	framework.ProcessDaemon(ExecuteName, generateConfigure, createDaemon)
 }

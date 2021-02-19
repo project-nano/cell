@@ -341,6 +341,7 @@ type instanceCommand struct {
 	NetworkResource map[string]InstanceNetworkResource
 	Accept          bool
 	Rule            SecurityPolicyRule
+	Enable          bool
 	ResultChan      chan InstanceResult
 	ErrorChan       chan error
 	AllConfigChan   chan []GuestConfig
@@ -392,6 +393,7 @@ const (
 	InsCmdChangeDefaultSecurityPolicyAction
 	InsCmdPullUpSecurityPolicyRule
 	InsCmdPushDownSecurityPolicyRule
+	InsCmdSetAutoStart
 	InsCmdInvalid
 )
 
@@ -437,6 +439,7 @@ var instanceCommandNames = []string{
 	"ChangeDefaultSecurityPolicyAction",
 	"PullUpSecurityPolicyRule",
 	"PushDownSecurityPolicyRule",
+	"SetAutoStart",
 }
 
 func (c InstanceCommandType) toString() string {
@@ -726,6 +729,10 @@ func (manager *InstanceManager) ModifyGuestMemory(id string, memory uint, resp c
 	manager.commands <- instanceCommand{Type: InsCmdModifyMemory, Instance: id, Memory: memory, ErrorChan: resp}
 }
 
+func (manager *InstanceManager) ModifyAutoStart(guestID string, enable bool, respChan chan error){
+	manager.commands <- instanceCommand{Type: InsCmdSetAutoStart, Instance: guestID, Enable: enable, ErrorChan: respChan}
+}
+
 func (manager *InstanceManager) ModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error){
 	manager.commands <- instanceCommand{Type: InsCmdModifyCPUPriority, Instance: guestID, Priority: priority, ErrorChan: resp}
 }
@@ -749,6 +756,7 @@ func (manager *InstanceManager) GetGuestAuth(id string, resp chan InstanceResult
 func (manager *InstanceManager) FinishGuestInitialize(id string, resp chan error){
 	manager.commands <- instanceCommand{Type: InsCmdFinishInitialize, Instance: id, ErrorChan:resp}
 }
+
 func (manager *InstanceManager) UpdateDiskSize(guest string, index int, size uint64, resp chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdUpdateDiskSize, Instance: guest, Index: index, Size: size, ErrorChan: resp}
 }
@@ -772,6 +780,7 @@ func (manager *InstanceManager) DetachMedia(id string, resp chan error){
 func (manager *InstanceManager) GetNetworkResources(instances []string, respChan chan InstanceResult){
 	manager.commands <- instanceCommand{Type: InsCmdGetNetworkResource, InstanceList: instances, ResultChan:respChan}
 }
+
 func (manager *InstanceManager) AttachInstances(resources map[string]InstanceNetworkResource, respChan chan error){
 	manager.commands <- instanceCommand{Type: InsCmdAttachInstance, NetworkResource: resources, ErrorChan:respChan}
 }
@@ -792,11 +801,9 @@ func (manager *InstanceManager) ResetMonitorPassword(id string, respChan chan In
 	manager.commands <- instanceCommand{Type: InsCmdResetMonitorSecret, Instance: id, ResultChan: respChan}
 }
 
-
 func (manager *InstanceManager) SyncAddressAllocation(allocationMode string){
 	manager.commands <- instanceCommand{Type: InsCmdSyncAddressAllocation, Allocation: allocationMode}
 }
-
 //Security Policy
 func (manager *InstanceManager) GetSecurityPolicy(instanceID string, respChan chan InstanceResult){
 	manager.commands <- instanceCommand{Type: InsCmdGetSecurityPolicy, Instance: instanceID, ResultChan: respChan}
@@ -1019,6 +1026,8 @@ func (manager *InstanceManager) handleCommand(cmd instanceCommand) {
 		err = manager.handlePullUpSecurityPolicyRule(cmd.Instance, cmd.Index, cmd.ErrorChan)
 	case InsCmdPushDownSecurityPolicyRule:
 		err = manager.handlePushDownSecurityPolicyRule(cmd.Instance, cmd.Index, cmd.ErrorChan)
+	case InsCmdSetAutoStart:
+		err = manager.handleModifyAutoStart(cmd.Instance, cmd.Enable, cmd.ErrorChan)
 	default:
 		log.Printf("<instance> unsupported command type %d", cmd.Type)
 	}
@@ -1301,6 +1310,34 @@ func (manager *InstanceManager) handleModifyGuestMemory(id string, memory uint, 
 	manager.instances[id] = current
 	resp <- nil
 	return manager.saveInstanceConfig(id)
+}
+
+func (manager *InstanceManager) handleModifyAutoStart(guestID string, enable bool, respChan chan error) (err error){
+	current, exists := manager.instances[guestID]
+	if !exists {
+		err = fmt.Errorf("invalid guest '%s'", guestID)
+		respChan <- err
+		return
+	}
+	if current.AutoStart == enable {
+		err = errors.New("no need to change")
+		respChan <- err
+		return
+	}
+	if err = manager.util.ModifyAutoStart(guestID, enable); err != nil {
+		respChan <- err
+		return
+	}
+	current.AutoStart = enable
+	manager.instances[guestID] = current
+	if enable{
+		log.Printf("<instance> guest '%s' enable auto start", current.Name)
+	}else{
+		log.Printf("<instance> guest '%s' disable auto start", current.Name)
+	}
+
+	respChan <- nil
+	return manager.saveInstanceConfig(guestID)
 }
 
 func (manager *InstanceManager) handleModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error) (err error){
