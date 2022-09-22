@@ -27,8 +27,7 @@ Set environment variable GOPATH before compiling
 ```
 #git clone https://github.com/project-nano/cell.git
 #cd cell
-#export GOPATH="/home/develop/go:/home/develop/nano/cell"
-#go build -o cell -i -ldflags="-w -s"
+#go build -o cell -ldflags="-w -s"
 ```
 
 
