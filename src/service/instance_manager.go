@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	InstanceMediaOptionNone    uint = iota
+	InstanceMediaOptionNone uint = iota
 	InstanceMediaOptionImage
 	InstanceMediaOptionNetwork
 )
@@ -46,8 +46,8 @@ const (
 	TemplateOperatingSystemInvalid
 )
 
-func (value TemplateOperatingSystem) ToString() string{
-	switch value{
+func (value TemplateOperatingSystem) ToString() string {
+	switch value {
 	case TemplateOperatingSystemLinux:
 		return SystemNameLinux
 	case TemplateOperatingSystemWindows:
@@ -66,8 +66,8 @@ const (
 	TemplateDiskDriverInvalid
 )
 
-func (value TemplateDiskDriver) ToString() string{
-	switch value{
+func (value TemplateDiskDriver) ToString() string {
+	switch value {
 	case TemplateDiskDriverSCSI:
 		return DiskBusSCSI
 	case TemplateDiskDriverSATA:
@@ -88,8 +88,8 @@ const (
 	TemplateNetworkModelInvalid
 )
 
-func (value TemplateNetworkModel) ToString() string{
-	switch value{
+func (value TemplateNetworkModel) ToString() string {
+	switch value {
 	case TemplateNetworkModelVirtIO:
 		return NetworkModelVIRTIO
 	case TemplateNetworkModelE1000:
@@ -112,8 +112,8 @@ const (
 	TemplateDisplayDriverInvalid
 )
 
-func (value TemplateDisplayDriver) ToString() string{
-	switch value{
+func (value TemplateDisplayDriver) ToString() string {
+	switch value {
 	case TemplateDisplayDriverVGA:
 		return DisplayDriverVGA
 	case TemplateDisplayDriverCirrus:
@@ -137,8 +137,8 @@ const (
 	TemplateRemoteControlInvalid
 )
 
-func (value TemplateRemoteControl) ToString() string{
-	switch value{
+func (value TemplateRemoteControl) ToString() string {
+	switch value {
 	case TemplateRemoteControlVNC:
 		return RemoteControlVNC
 	case TemplateRemoteControlSPICE:
@@ -156,8 +156,8 @@ const (
 	TemplateUSBModelInvalid
 )
 
-func (value TemplateUSBModel) ToString() string{
-	switch value{
+func (value TemplateUSBModel) ToString() string {
+	switch value {
 	case TemplateUSBModelNone:
 		return USBModelNone
 	case TemplateUSBModelXHCI:
@@ -176,8 +176,8 @@ const (
 	TemplateTabletModelInvalid
 )
 
-func (value TemplateTabletModel) ToString() string{
-	switch value{
+func (value TemplateTabletModel) ToString() string {
+	switch value {
 	case TemplateTabletModelNone:
 		return TabletBusNone
 	case TemplateTabletModelUSB:
@@ -208,7 +208,7 @@ const (
 )
 
 const (
-	PolicyRuleProtocolIndexTCP  = iota
+	PolicyRuleProtocolIndexTCP = iota
 	PolicyRuleProtocolIndexUDP
 	PolicyRuleProtocolIndexICMP
 	PolicyRuleProtocolIndexInvalid
@@ -234,19 +234,20 @@ type SecurityPolicy struct {
 }
 
 type GuestConfig struct {
-	Name               string              `json:"name"`
-	ID                 string              `json:"id"`
-	User               string              `json:"user"`
-	Group              string              `json:"group"`
-	Cores              uint                `json:"cores"`
-	Memory             uint                `json:"memory"`
-	Disks              []uint64            `json:"disks"`
-	AutoStart          bool                `json:"auto_start"`
-	System             string              `json:"system,omitempty"`
-	MonitorPort        uint                `json:"monitor_port"`
-	MonitorSecret      string              `json:"monitor_secret"`
-	Created            bool                `json:"-"`
-	Progress           uint                `json:"-"` //limit to 100
+	Name          string   `json:"name"`
+	ID            string   `json:"id"`
+	User          string   `json:"user"`
+	Group         string   `json:"group"`
+	Cores         uint     `json:"cores"`
+	Memory        uint     `json:"memory"`
+	Disks         []uint64 `json:"disks"`
+	AutoStart     bool     `json:"auto_start"`
+	System        string   `json:"system,omitempty"`
+	MonitorPort   uint     `json:"monitor_port"`
+	MonitorSecret string   `json:"monitor_secret"`
+	Created       bool     `json:"-"`
+	Progress      uint     `json:"-"` //limit to 100
+
 	Running            bool                `json:"-"`
 	StorageMode        InstanceStorageMode `json:"storage_mode"`
 	StoragePool        string              `json:"storage_pool"`
@@ -352,7 +353,7 @@ type instanceCommand struct {
 type InstanceCommandType int
 
 const (
-	InsCmdCreate              = iota
+	InsCmdCreate = iota
 	InsCmdDelete
 	InsCmdGet
 	InsCmdGetStatus
@@ -443,8 +444,8 @@ var instanceCommandNames = []string{
 }
 
 func (c InstanceCommandType) toString() string {
-	if c >= InsCmdInvalid{
-		return  "invalid"
+	if c >= InsCmdInvalid {
+		return "invalid"
 	}
 	return instanceCommandNames[c]
 }
@@ -495,7 +496,7 @@ type InstanceManager struct {
 }
 
 func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (manager *InstanceManager, err error) {
-	if InsCmdInvalid != len(instanceCommandNames){
+	if InsCmdInvalid != len(instanceCommandNames) {
 		err = fmt.Errorf("insufficient command names %d/%d", len(instanceCommandNames), InsCmdInvalid)
 		return
 	}
@@ -530,15 +531,15 @@ func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (manager *
 	return manager, nil
 }
 
-func (manager *InstanceManager) GetInstanceNetworkResources() (result map[string]InstanceNetworkResource){
+func (manager *InstanceManager) GetInstanceNetworkResources() (result map[string]InstanceNetworkResource) {
 	result = map[string]InstanceNetworkResource{}
-	for instanceID, instance := range manager.instances{
+	for instanceID, instance := range manager.instances {
 		result[instanceID] = InstanceNetworkResource{
-			MonitorPort: int(instance.MonitorPort),
+			MonitorPort:     int(instance.MonitorPort),
 			HardwareAddress: instance.HardwareAddress,
 			InternalAddress: instance.InternalAddress,
 			ExternalAddress: instance.ExternalAddress,
-			}
+		}
 	}
 	return result
 }
@@ -547,11 +548,11 @@ func (manager *InstanceManager) GetEventChannel() chan InstanceStatusChangedEven
 	return manager.events
 }
 
-func (manager *InstanceManager) Start() error{
+func (manager *InstanceManager) Start() error {
 	return manager.runner.Start()
 }
 
-func (manager *InstanceManager) Stop() error{
+func (manager *InstanceManager) Stop() error {
 	return manager.runner.Stop()
 }
 
@@ -636,7 +637,7 @@ func (manager *InstanceManager) syncInstanceStatus() {
 			if status.NetworkAddress == "" {
 				//check network interface
 				var elapsed = int(now.Sub(status.startTime) / SyncInterval)
-				if (NetworkCheckDivider - 1) == elapsed % NetworkCheckDivider {
+				if (NetworkCheckDivider - 1) == elapsed%NetworkCheckDivider {
 					//get ip address
 					ip, err := manager.util.GetIPv4Address(id, status.HardwareAddress)
 					if (err == nil) && (ip != "") {
@@ -645,12 +646,12 @@ func (manager *InstanceManager) syncInstanceStatus() {
 						manager.events <- InstanceStatusChangedEvent{ID: id, Event: AddressChanged, Address: ip, Timestamp: time.Now()}
 					}
 				}
-			}else{
+			} else {
 				//detect interval change to 2 min after established some IP
 				var currentIP = status.NetworkAddress
 				var elapsed = int(now.Sub(status.startTime) / SyncInterval)
 				var prolongedDivider = NetworkCheckDivider * 4 // 30s => 2min
-				if (prolongedDivider - 1) == elapsed % prolongedDivider {
+				if (prolongedDivider - 1) == elapsed%prolongedDivider {
 					//get ip address
 					ip, err := manager.util.GetIPv4Address(id, status.HardwareAddress)
 					if (err == nil) && (ip != currentIP) {
@@ -666,12 +667,12 @@ func (manager *InstanceManager) syncInstanceStatus() {
 	}
 }
 
-func (manager *InstanceManager) UsingStorage(name, url string, respChan chan error){
-	manager.commands <- instanceCommand{Type:InsCmdUsingStorage, Name:name, URL:url, ErrorChan:respChan}
+func (manager *InstanceManager) UsingStorage(name, url string, respChan chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdUsingStorage, Name: name, URL: url, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) DetachStorage(respChan chan error){
-	manager.commands <- instanceCommand{Type:InsCmdDetachStorage, ErrorChan:respChan}
+func (manager *InstanceManager) DetachStorage(respChan chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdDetachStorage, ErrorChan: respChan}
 }
 
 func (manager *InstanceManager) CreateInstance(config GuestConfig, resp chan error) {
@@ -699,7 +700,7 @@ func (manager *InstanceManager) StartInstance(id string, resp chan error) {
 	manager.commands <- cmd
 }
 func (manager *InstanceManager) StartInstanceWithMedia(id string, media InstanceMediaConfig, resp chan error) {
-	cmd := instanceCommand{Type: InsCmdStart, Instance: id, Media:media, ErrorChan: resp}
+	cmd := instanceCommand{Type: InsCmdStart, Instance: id, Media: media, ErrorChan: resp}
 	manager.commands <- cmd
 }
 func (manager *InstanceManager) StopInstance(id string, reboot, force bool, resp chan error) {
@@ -716,9 +717,8 @@ func (manager *InstanceManager) IsInstanceRunning(id string, resp chan bool) {
 	manager.commands <- cmd
 }
 
-
-func (manager *InstanceManager) ModifyGuestName(id, name string, resp chan error){
-	manager.commands <- instanceCommand{Type:InsCmdRename, Instance:id, Name: name, ErrorChan:resp}
+func (manager *InstanceManager) ModifyGuestName(id, name string, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdRename, Instance: id, Name: name, ErrorChan: resp}
 }
 
 func (manager *InstanceManager) ModifyGuestCore(id string, core uint, resp chan error) {
@@ -729,20 +729,20 @@ func (manager *InstanceManager) ModifyGuestMemory(id string, memory uint, resp c
 	manager.commands <- instanceCommand{Type: InsCmdModifyMemory, Instance: id, Memory: memory, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) ModifyAutoStart(guestID string, enable bool, respChan chan error){
+func (manager *InstanceManager) ModifyAutoStart(guestID string, enable bool, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdSetAutoStart, Instance: guestID, Enable: enable, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) ModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error){
+func (manager *InstanceManager) ModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdModifyCPUPriority, Instance: guestID, Priority: priority, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) ModifyDiskThreshold(guestID string, readSpeed, readIOPS, writeSpeed, writeIOPS uint64, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdModifyDiskThreshold, Instance: guestID, ReadSpeed: readSpeed, ReadIOPS: readIOPS, WriteSpeed:writeSpeed, WriteIOPS: writeIOPS, ErrorChan: resp}
+func (manager *InstanceManager) ModifyDiskThreshold(guestID string, readSpeed, readIOPS, writeSpeed, writeIOPS uint64, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdModifyDiskThreshold, Instance: guestID, ReadSpeed: readSpeed, ReadIOPS: readIOPS, WriteSpeed: writeSpeed, WriteIOPS: writeIOPS, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) ModifyNetworkThreshold(guestID string, receive, send uint64, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdModifyNetworkThreshold, Instance: guestID, ReceiveSpeed:receive, SendSpeed: send, ErrorChan: resp}
+func (manager *InstanceManager) ModifyNetworkThreshold(guestID string, receive, send uint64, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdModifyNetworkThreshold, Instance: guestID, ReceiveSpeed: receive, SendSpeed: send, ErrorChan: resp}
 }
 
 func (manager *InstanceManager) ModifyGuestAuth(id, password, usr string, resp chan InstanceResult) {
@@ -753,83 +753,84 @@ func (manager *InstanceManager) GetGuestAuth(id string, resp chan InstanceResult
 	manager.commands <- instanceCommand{Type: InsCmdGetAuth, Instance: id, ResultChan: resp}
 }
 
-func (manager *InstanceManager) FinishGuestInitialize(id string, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdFinishInitialize, Instance: id, ErrorChan:resp}
+func (manager *InstanceManager) FinishGuestInitialize(id string, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdFinishInitialize, Instance: id, ErrorChan: resp}
 }
 
 func (manager *InstanceManager) UpdateDiskSize(guest string, index int, size uint64, resp chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdUpdateDiskSize, Instance: guest, Index: index, Size: size, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) AddEventListener(listener string, eventChan chan InstanceStatusChangedEvent){
-	manager.commands <- instanceCommand{Type: InsCmdAddEventListener, Name:listener, EventChan:eventChan}
+func (manager *InstanceManager) AddEventListener(listener string, eventChan chan InstanceStatusChangedEvent) {
+	manager.commands <- instanceCommand{Type: InsCmdAddEventListener, Name: listener, EventChan: eventChan}
 }
 
-func (manager *InstanceManager) RemoveEventListener(listener string){
-	manager.commands <- instanceCommand{Type: InsCmdRemoveEventListener, Name:listener}
+func (manager *InstanceManager) RemoveEventListener(listener string) {
+	manager.commands <- instanceCommand{Type: InsCmdRemoveEventListener, Name: listener}
 }
 
-func (manager *InstanceManager) AttachMedia(id string, media InstanceMediaConfig, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdInsertMedia, Instance:id, Media:media, ErrorChan:resp}
+func (manager *InstanceManager) AttachMedia(id string, media InstanceMediaConfig, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdInsertMedia, Instance: id, Media: media, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) DetachMedia(id string, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdEjectMedia, Instance:id, ErrorChan:resp}
+func (manager *InstanceManager) DetachMedia(id string, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdEjectMedia, Instance: id, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) GetNetworkResources(instances []string, respChan chan InstanceResult){
-	manager.commands <- instanceCommand{Type: InsCmdGetNetworkResource, InstanceList: instances, ResultChan:respChan}
+func (manager *InstanceManager) GetNetworkResources(instances []string, respChan chan InstanceResult) {
+	manager.commands <- instanceCommand{Type: InsCmdGetNetworkResource, InstanceList: instances, ResultChan: respChan}
 }
 
-func (manager *InstanceManager) AttachInstances(resources map[string]InstanceNetworkResource, respChan chan error){
-	manager.commands <- instanceCommand{Type: InsCmdAttachInstance, NetworkResource: resources, ErrorChan:respChan}
+func (manager *InstanceManager) AttachInstances(resources map[string]InstanceNetworkResource, respChan chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdAttachInstance, NetworkResource: resources, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) DetachInstances(instances []string, respChan chan error){
-	manager.commands <- instanceCommand{Type: InsCmdDetachInstance, InstanceList:instances, ErrorChan:respChan}
+func (manager *InstanceManager) DetachInstances(instances []string, respChan chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdDetachInstance, InstanceList: instances, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) MigrateInstances(instances []string, respChan chan error){
-	manager.commands <- instanceCommand{Type: InsCmdMigrateInstance, InstanceList:instances, ErrorChan:respChan}
+func (manager *InstanceManager) MigrateInstances(instances []string, respChan chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdMigrateInstance, InstanceList: instances, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) ResetGuestSystem(id string, resp chan error){
-	manager.commands <- instanceCommand{Type: InsCmdResetSystem, Instance: id, ErrorChan:resp}
+func (manager *InstanceManager) ResetGuestSystem(id string, resp chan error) {
+	manager.commands <- instanceCommand{Type: InsCmdResetSystem, Instance: id, ErrorChan: resp}
 }
 
-func (manager *InstanceManager) ResetMonitorPassword(id string, respChan chan InstanceResult){
+func (manager *InstanceManager) ResetMonitorPassword(id string, respChan chan InstanceResult) {
 	manager.commands <- instanceCommand{Type: InsCmdResetMonitorSecret, Instance: id, ResultChan: respChan}
 }
 
-func (manager *InstanceManager) SyncAddressAllocation(allocationMode string){
+func (manager *InstanceManager) SyncAddressAllocation(allocationMode string) {
 	manager.commands <- instanceCommand{Type: InsCmdSyncAddressAllocation, Allocation: allocationMode}
 }
-//Security Policy
-func (manager *InstanceManager) GetSecurityPolicy(instanceID string, respChan chan InstanceResult){
+
+// Security Policy
+func (manager *InstanceManager) GetSecurityPolicy(instanceID string, respChan chan InstanceResult) {
 	manager.commands <- instanceCommand{Type: InsCmdGetSecurityPolicy, Instance: instanceID, ResultChan: respChan}
 }
 
-func (manager *InstanceManager) AddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error){
+func (manager *InstanceManager) AddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdAddSecurityPolicyRule, Instance: instanceID, Rule: rule, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) ModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error){
+func (manager *InstanceManager) ModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdModifySecurityPolicyRule, Instance: instanceID, Index: index, Rule: rule, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) RemoveSecurityPolicyRule(instanceID string, index int, respChan chan error){
+func (manager *InstanceManager) RemoveSecurityPolicyRule(instanceID string, index int, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdRemoveSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) ChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error){
+func (manager *InstanceManager) ChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdChangeDefaultSecurityPolicyAction, Instance: instanceID, Accept: accept, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) PullUpSecurityPolicyRule(instanceID string, index int, respChan chan error){
+func (manager *InstanceManager) PullUpSecurityPolicyRule(instanceID string, index int, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdPullUpSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
 }
 
-func (manager *InstanceManager) PushDownSecurityPolicyRule(instanceID string, index int, respChan chan error){
+func (manager *InstanceManager) PushDownSecurityPolicyRule(instanceID string, index int, respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdPushDownSecurityPolicyRule, Instance: instanceID, Index: index, ErrorChan: respChan}
 }
 
@@ -839,12 +840,12 @@ type instanceDataConfig struct {
 	StorageURL  string        `json:"storage_url,omitempty"`
 }
 
-func (manager *InstanceManager) saveInstanceConfig(instanceID string) (err error){
-	if DefaultLocalPoolName != manager.storagePool{
+func (manager *InstanceManager) saveInstanceConfig(instanceID string) (err error) {
+	if DefaultLocalPoolName != manager.storagePool {
 		//share pool available
 		var metaFile = filepath.Join(manager.storageURL, fmt.Sprintf("%s.%s", instanceID, MetaFileSuffix))
 		ins, exists := manager.instances[instanceID]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("invalid instance '%s'", instanceID)
 			return
 		}
@@ -860,18 +861,18 @@ func (manager *InstanceManager) saveInstanceConfig(instanceID string) (err error
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) removeInstanceConfig(instanceID string) (err error){
-	if DefaultLocalPoolName != manager.storagePool{
+func (manager *InstanceManager) removeInstanceConfig(instanceID string) (err error) {
+	if DefaultLocalPoolName != manager.storagePool {
 		//share pool available
 		var metaFile = filepath.Join(manager.storageURL, fmt.Sprintf("%s.%s", instanceID, MetaFileSuffix))
-		if _, err = os.Stat(metaFile); !os.IsNotExist(err){
+		if _, err = os.Stat(metaFile); !os.IsNotExist(err) {
 			//exists
-			if err = os.Remove(metaFile);err != nil{
+			if err = os.Remove(metaFile); err != nil {
 				log.Printf("<instance> warning: remove meta file %s fail: %s", metaFile, err.Error())
-			}else{
+			} else {
 				log.Printf("<instance> metafile '%s' removed", metaFile)
 			}
-		}else{
+		} else {
 			log.Printf("<instance> warning: can not find meta file '%s'", metaFile)
 		}
 	}
@@ -916,10 +917,10 @@ func (manager *InstanceManager) loadConfig() error {
 		}
 		ins.Running = realStatus.Running
 		ins.Created = true
-		if "" == ins.AuthUser{
-			if SystemNameWindows == ins.Template.OperatingSystem{
+		if "" == ins.AuthUser {
+			if SystemNameWindows == ins.Template.OperatingSystem {
 				ins.AuthUser = AdminWindows
-			}else{
+			} else {
 				ins.AuthUser = AdminLinux
 			}
 		}
@@ -932,10 +933,10 @@ func (manager *InstanceManager) loadConfig() error {
 			manager.instances[ins.ID] = InstanceStatus{GuestConfig: ins}
 		}
 	}
-	if "" != config.StoragePool{
+	if "" != config.StoragePool {
 		manager.storagePool = config.StoragePool
 		manager.storageURL = config.StorageURL
-	}else{
+	} else {
 		manager.storagePool = DefaultLocalPoolName
 	}
 	log.Printf("<instance> %d guest(es) loaded from '%s', current storage '%s'", len(manager.instances),
@@ -1047,7 +1048,7 @@ func (manager *InstanceManager) handleCreateInstance(config GuestConfig, resp ch
 		resp <- err
 		return err
 	}
-	if nil == config.Template{
+	if nil == config.Template {
 		config.Template = &manager.defaultTemplate
 		log.Printf("<instance> using default template for instance '%s'", config.Name)
 	}
@@ -1238,14 +1239,14 @@ func (manager *InstanceManager) handleGetAllConfig(respChan chan []GuestConfig) 
 	return nil
 }
 
-func (manager *InstanceManager) handleModifyGuestName(id, name string, resp chan error) (err error){
+func (manager *InstanceManager) handleModifyGuestName(id, name string, resp chan error) (err error) {
 	ins, exists := manager.instances[id]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", id)
 		resp <- err
 		return err
 	}
-	if err = manager.util.Rename(id, name); err != nil{
+	if err = manager.util.Rename(id, name); err != nil {
 		resp <- err
 		return err
 	}
@@ -1312,7 +1313,7 @@ func (manager *InstanceManager) handleModifyGuestMemory(id string, memory uint, 
 	return manager.saveInstanceConfig(id)
 }
 
-func (manager *InstanceManager) handleModifyAutoStart(guestID string, enable bool, respChan chan error) (err error){
+func (manager *InstanceManager) handleModifyAutoStart(guestID string, enable bool, respChan chan error) (err error) {
 	current, exists := manager.instances[guestID]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", guestID)
@@ -1330,9 +1331,9 @@ func (manager *InstanceManager) handleModifyAutoStart(guestID string, enable boo
 	}
 	current.AutoStart = enable
 	manager.instances[guestID] = current
-	if enable{
+	if enable {
 		log.Printf("<instance> guest '%s' enable auto start", current.Name)
-	}else{
+	} else {
 		log.Printf("<instance> guest '%s' disable auto start", current.Name)
 	}
 
@@ -1340,19 +1341,19 @@ func (manager *InstanceManager) handleModifyAutoStart(guestID string, enable boo
 	return manager.saveInstanceConfig(guestID)
 }
 
-func (manager *InstanceManager) handleModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error) (err error){
+func (manager *InstanceManager) handleModifyCPUPriority(guestID string, priority PriorityEnum, resp chan error) (err error) {
 	currentGuest, exists := manager.instances[guestID]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", guestID)
 		resp <- err
 		return err
 	}
-	if currentGuest.CPUPriority == priority{
+	if currentGuest.CPUPriority == priority {
 		err = errors.New("no need to change")
 		resp <- err
 		return err
 	}
-	if err = manager.util.SetCPUThreshold(guestID, priority); err != nil{
+	if err = manager.util.SetCPUThreshold(guestID, priority); err != nil {
 		resp <- err
 		return err
 	}
@@ -1360,23 +1361,23 @@ func (manager *InstanceManager) handleModifyCPUPriority(guestID string, priority
 	currentGuest.CPUPriority = priority
 	manager.instances[guestID] = currentGuest
 	resp <- nil
-	return  manager.saveInstanceConfig(guestID)
+	return manager.saveInstanceConfig(guestID)
 }
 
-func (manager *InstanceManager) handleModifyDiskThreshold(guestID string, readSpeed, readIOPS, writeSpeed, writeIOPS uint64, resp chan error) (err error){
+func (manager *InstanceManager) handleModifyDiskThreshold(guestID string, readSpeed, readIOPS, writeSpeed, writeIOPS uint64, resp chan error) (err error) {
 	currentGuest, exists := manager.instances[guestID]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", guestID)
 		resp <- err
 		return err
 	}
-	if currentGuest.ReadSpeed == readSpeed && currentGuest.ReadIOPS == readIOPS && currentGuest.WriteSpeed == writeSpeed && currentGuest.WriteIOPS == writeIOPS{
+	if currentGuest.ReadSpeed == readSpeed && currentGuest.ReadIOPS == readIOPS && currentGuest.WriteSpeed == writeSpeed && currentGuest.WriteIOPS == writeIOPS {
 		err = errors.New("no need to change")
 		resp <- err
 		return err
 	}
 
-	if err = manager.util.SetDiskThreshold(guestID, readSpeed, readIOPS, writeSpeed, writeIOPS); err != nil{
+	if err = manager.util.SetDiskThreshold(guestID, readSpeed, readIOPS, writeSpeed, writeIOPS); err != nil {
 		resp <- err
 		return err
 	}
@@ -1390,33 +1391,33 @@ func (manager *InstanceManager) handleModifyDiskThreshold(guestID string, readSp
 	currentGuest.WriteIOPS = writeIOPS
 	manager.instances[guestID] = currentGuest
 	resp <- nil
-	return  manager.saveInstanceConfig(guestID)
+	return manager.saveInstanceConfig(guestID)
 }
 
-func (manager *InstanceManager) handleModifyNetworkThreshold(guestID string, receive, send uint64, resp chan error) (err error){
+func (manager *InstanceManager) handleModifyNetworkThreshold(guestID string, receive, send uint64, resp chan error) (err error) {
 	instance, exists := manager.instances[guestID]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", guestID)
 		resp <- err
 		return err
 	}
-	if instance.ReceiveSpeed == receive && instance.SendSpeed == send{
+	if instance.ReceiveSpeed == receive && instance.SendSpeed == send {
 		err = errors.New("no need to change")
 		resp <- err
 		return err
 	}
 
-	if err = manager.util.SetNetworkThreshold(guestID, receive, send); err != nil{
+	if err = manager.util.SetNetworkThreshold(guestID, receive, send); err != nil {
 		resp <- err
 		return err
 	}
 	log.Printf("<instance> network limit of guest '%s' changed to receive %d Kps / send %d Kps", guestID,
-		receive >> 10, send >> 10)
+		receive>>10, send>>10)
 	instance.ReceiveSpeed = receive
 	instance.SendSpeed = send
 	manager.instances[guestID] = instance
 	resp <- nil
-	return  manager.saveInstanceConfig(guestID)
+	return manager.saveInstanceConfig(guestID)
 }
 
 func (manager *InstanceManager) handleModifyGuestAuth(id, password, user string, resp chan InstanceResult) (err error) {
@@ -1451,14 +1452,14 @@ func (manager *InstanceManager) handleGetGuestAuth(id string, resp chan Instance
 	resp <- InstanceResult{User: ins.AuthUser, Password: ins.AuthSecret}
 	return nil
 }
-func (manager *InstanceManager) handleFinishGuestInitialize(id string, resp chan error) (err error){
+func (manager *InstanceManager) handleFinishGuestInitialize(id string, resp chan error) (err error) {
 	ins, exists := manager.instances[id]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", id)
 		resp <- err
 		return err
 	}
-	if ins.Initialized{
+	if ins.Initialized {
 		err = fmt.Errorf("guest '%s' already initialized", id)
 		resp <- err
 		return err
@@ -1470,16 +1471,16 @@ func (manager *InstanceManager) handleFinishGuestInitialize(id string, resp chan
 	return manager.saveInstanceConfig(id)
 }
 
-func (manager *InstanceManager) handleResetGuestSystem(guestID string, resp chan error) (err error){
+func (manager *InstanceManager) handleResetGuestSystem(guestID string, resp chan error) (err error) {
 	ins, exists := manager.instances[guestID]
 	if !exists {
 		err = fmt.Errorf("invalid guest '%s'", guestID)
 		resp <- err
 		return err
 	}
-	if !ins.Initialized{
+	if !ins.Initialized {
 		log.Printf("<instance> warning: guest '%s' not initialized before reset", guestID)
-	}else{
+	} else {
 		ins.Initialized = false
 	}
 	manager.instances[guestID] = ins
@@ -1506,9 +1507,9 @@ func (manager *InstanceManager) handleUpdateDiskSize(guest string, index int, si
 	return manager.saveInstanceConfig(guest)
 }
 
-func (manager *InstanceManager) handleAddEventListener(listener string, eventChan chan InstanceStatusChangedEvent) (err error){
+func (manager *InstanceManager) handleAddEventListener(listener string, eventChan chan InstanceStatusChangedEvent) (err error) {
 	_, exists := manager.eventListeners[listener]
-	if exists{
+	if exists {
 		err = fmt.Errorf("listener '%s' already exists", listener)
 		return
 	}
@@ -1517,20 +1518,20 @@ func (manager *InstanceManager) handleAddEventListener(listener string, eventCha
 	return nil
 }
 
-func (manager *InstanceManager) handleAttachMedia(id string, media InstanceMediaConfig, resp chan error) (err error){
+func (manager *InstanceManager) handleAttachMedia(id string, media InstanceMediaConfig, resp chan error) (err error) {
 	ins, exists := manager.instances[id]
 	if !exists {
 		err = fmt.Errorf("invalid instance '%s'", id)
 		resp <- err
 		return err
 	}
-	if ins.MediaAttached{
+	if ins.MediaAttached {
 		err = fmt.Errorf("instance '%s' already has media attached", id)
 		resp <- err
 		return err
 	}
 	var uri = manager.apiPath(fmt.Sprintf("/%s/%s/file/", MediaImagePath, media.ID))
-	if err = manager.util.InsertMedia(id, media.Host, uri, media.Port); err != nil{
+	if err = manager.util.InsertMedia(id, media.Host, uri, media.Port); err != nil {
 		resp <- err
 		return err
 	}
@@ -1541,19 +1542,19 @@ func (manager *InstanceManager) handleAttachMedia(id string, media InstanceMedia
 	log.Printf("<instance> media '%s' attached to '%s'", media.ID, ins.Name)
 	return nil
 }
-func (manager *InstanceManager) handleDetachMedia(id string, resp chan error)(err error){
+func (manager *InstanceManager) handleDetachMedia(id string, resp chan error) (err error) {
 	ins, exists := manager.instances[id]
 	if !exists {
 		err = fmt.Errorf("invalid instance '%s'", id)
 		resp <- err
 		return err
 	}
-	if !ins.MediaAttached{
+	if !ins.MediaAttached {
 		err = fmt.Errorf("no media attached with instance '%s'", id)
 		resp <- err
 		return err
 	}
-	if err = manager.util.EjectMedia(id); err != nil{
+	if err = manager.util.EjectMedia(id); err != nil {
 		resp <- err
 		return err
 	}
@@ -1565,15 +1566,15 @@ func (manager *InstanceManager) handleDetachMedia(id string, resp chan error)(er
 	return nil
 }
 
-func (manager *InstanceManager) handleUsingStorage(name, url string, respChan chan error) (err error){
-	if name == manager.storagePool{
+func (manager *InstanceManager) handleUsingStorage(name, url string, respChan chan error) (err error) {
+	if name == manager.storagePool {
 		log.Printf("<instance> no need to change storage '%s'", name)
 		respChan <- nil
 		return nil
 	}
 	manager.storagePool = name
 	manager.storageURL = url
-	if _, err = os.Stat(url); os.IsNotExist(err){
+	if _, err = os.Stat(url); os.IsNotExist(err) {
 		err = fmt.Errorf("invalid image path '%s'", url)
 		respChan <- err
 		return err
@@ -1583,8 +1584,8 @@ func (manager *InstanceManager) handleUsingStorage(name, url string, respChan ch
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleDetachStorage(respChan chan error) (err error){
-	if DefaultLocalPoolName == manager.storagePool{
+func (manager *InstanceManager) handleDetachStorage(respChan chan error) (err error) {
+	if DefaultLocalPoolName == manager.storagePool {
 		log.Printf("<instance> no need to detach local storage '%s'", manager.storagePool)
 		respChan <- nil
 		return nil
@@ -1596,85 +1597,84 @@ func (manager *InstanceManager) handleDetachStorage(respChan chan error) (err er
 	return manager.saveConfig()
 }
 
-
-func (manager *InstanceManager) handleGetNetworkResources(instances []string, respChan chan InstanceResult) (err error){
+func (manager *InstanceManager) handleGetNetworkResources(instances []string, respChan chan InstanceResult) (err error) {
 	var result = map[string]InstanceNetworkResource{}
 	var sharedStorageEnabled = DefaultLocalPoolName != manager.storagePool
-	for _, instanceID := range instances{
-		if status, exists := manager.instances[instanceID]; exists{
+	for _, instanceID := range instances {
+		if status, exists := manager.instances[instanceID]; exists {
 			result[instanceID] = InstanceNetworkResource{int(status.MonitorPort), status.HardwareAddress, status.InternalAddress, status.ExternalAddress}
-		}else if !sharedStorageEnabled {
+		} else if !sharedStorageEnabled {
 			err = fmt.Errorf("shared storage required for load meta data for instance '%s'", instanceID)
-			respChan <- InstanceResult{Error:err}
-			return 
-		}else{
+			respChan <- InstanceResult{Error: err}
+			return
+		} else {
 			var metaFile = filepath.Join(manager.storageURL, fmt.Sprintf("%s.%s", instanceID, MetaFileSuffix))
-			if _, err = os.Stat(metaFile); os.IsNotExist(err){
+			if _, err = os.Stat(metaFile); os.IsNotExist(err) {
 				err = fmt.Errorf("meta file '%s' of instance '%s' not exists", metaFile, instanceID)
-				respChan <- InstanceResult{Error:err}
+				respChan <- InstanceResult{Error: err}
 				return
 			}
 			data, err := ioutil.ReadFile(metaFile)
-			if err != nil{
+			if err != nil {
 				log.Printf("<instance> read meta file for instance '%s' fail: %s", instanceID, err.Error())
-				respChan <- InstanceResult{Error:err}
+				respChan <- InstanceResult{Error: err}
 				return err
 			}
 			var ins = InstanceStatus{}
-			if err = json.Unmarshal(data, &ins.GuestConfig); err != nil{
+			if err = json.Unmarshal(data, &ins.GuestConfig); err != nil {
 				log.Printf("<instance> load config for instance '%s' fail: %s", instanceID, err.Error())
-				respChan <- InstanceResult{Error:err}
+				respChan <- InstanceResult{Error: err}
 				return err
 			}
 			result[instanceID] = InstanceNetworkResource{int(ins.MonitorPort), ins.HardwareAddress, ins.InternalAddress, ins.ExternalAddress}
 		}
 	}
-	respChan <- InstanceResult{NetworkResources:result}
+	respChan <- InstanceResult{NetworkResources: result}
 	return nil
 }
 
-func (manager *InstanceManager) handleAttachInstances(resources map[string]InstanceNetworkResource, respChan chan error) (err error){
-	if DefaultLocalPoolName == manager.storagePool{
+func (manager *InstanceManager) handleAttachInstances(resources map[string]InstanceNetworkResource, respChan chan error) (err error) {
+	if DefaultLocalPoolName == manager.storagePool {
 		err = errors.New("attach instance not support by the local storage")
 		respChan <- err
 		return err
 	}
-	for instanceID, resource := range resources{
+	for instanceID, resource := range resources {
 		var metaFile = filepath.Join(manager.storageURL, fmt.Sprintf("%s.%s", instanceID, MetaFileSuffix))
-		if _, err = os.Stat(metaFile); os.IsNotExist(err){
+		if _, err = os.Stat(metaFile); os.IsNotExist(err) {
 			err = fmt.Errorf("meta file '%s' of instance '%s' not exists", metaFile, instanceID)
 			respChan <- err
 			return err
 		}
 		data, err := ioutil.ReadFile(metaFile)
-		if err != nil{
+		if err != nil {
 			log.Printf("<instance> read meta file for instance '%s' fail: %s", instanceID, err.Error())
 			respChan <- err
 			return err
 		}
 		var ins = InstanceStatus{}
-		if err = json.Unmarshal(data, &ins.GuestConfig); err != nil{
+		if err = json.Unmarshal(data, &ins.GuestConfig); err != nil {
 			log.Printf("<instance> load config for instance '%s' fail: %s", instanceID, err.Error())
 			respChan <- err
 			return err
 		}
-		if nil == ins.Template{
+		if nil == ins.Template {
 			ins.Template = &manager.defaultTemplate
 			log.Printf("<instance> using default template for instance '%s'", ins.Name)
 		}
 		ins.MonitorPort = uint(resource.MonitorPort)
-		if ins.GuestConfig, err = manager.util.CreateInstance(ins.GuestConfig);err != nil{
+		if ins.GuestConfig, err = manager.util.CreateInstance(ins.GuestConfig); err != nil {
 			log.Printf("<instance> resume instance '%s' fail: %s", ins.Name, err.Error())
 			respChan <- err
 			return err
 		}
 		data, err = json.MarshalIndent(ins, "", " ")
-		if err != nil{
+		if err != nil {
 			log.Printf("<instance> generate meta data for instance '%s' fail: %s", ins.Name, err.Error())
 			respChan <- err
 			return err
 		}
-		if err = ioutil.WriteFile(metaFile, data, ConfigFilePerm); err != nil{
+		if err = ioutil.WriteFile(metaFile, data, ConfigFilePerm); err != nil {
 			log.Printf("<instance> write meta file for instance '%s' fail: %s", ins.Name, err.Error())
 			respChan <- err
 			return err
@@ -1687,14 +1687,14 @@ func (manager *InstanceManager) handleAttachInstances(resources map[string]Insta
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleDetachInstances(instances []string, respChan chan error) (err error){
-	if DefaultLocalPoolName == manager.storagePool{
+func (manager *InstanceManager) handleDetachInstances(instances []string, respChan chan error) (err error) {
+	if DefaultLocalPoolName == manager.storagePool {
 		err = errors.New("detach instance not support by the local storage")
 		respChan <- err
 		return err
 	}
-	if 0 == len(instances){
-		for id, _ := range manager.instances{
+	if 0 == len(instances) {
+		for id, _ := range manager.instances {
 			instances = append(instances, id)
 		}
 	}
@@ -1705,15 +1705,15 @@ func (manager *InstanceManager) handleDetachInstances(instances []string, respCh
 			respChan <- err
 			return err
 		}
-		if ins.Running{
-			if err = manager.util.StopInstance(instanceID, false, true);err != nil{
+		if ins.Running {
+			if err = manager.util.StopInstance(instanceID, false, true); err != nil {
 				log.Printf("<instance> shutdown instance '%s' for detaching fail: %s", ins.Name, err.Error())
 				respChan <- err
 				return err
 			}
 			log.Printf("<instance> instance '%s' shutdown for detaching", ins.Name)
 		}
-		if err = manager.util.DeleteInstance(instanceID);err != nil{
+		if err = manager.util.DeleteInstance(instanceID); err != nil {
 			log.Printf("<instance> detach instance '%s'('%s') fail: %s", ins.Name, instanceID, err.Error())
 			respChan <- err
 			return err
@@ -1726,22 +1726,22 @@ func (manager *InstanceManager) handleDetachInstances(instances []string, respCh
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleMigrateInstances(instances []string, respChan chan error) (err error){
-	if DefaultLocalPoolName == manager.storagePool{
+func (manager *InstanceManager) handleMigrateInstances(instances []string, respChan chan error) (err error) {
+	if DefaultLocalPoolName == manager.storagePool {
 		err = errors.New("migrate instance not support by the local storage")
 		respChan <- err
 		return err
 	}
-	for _, instanceID := range instances{
+	for _, instanceID := range instances {
 		ins, exists := manager.instances[instanceID]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("invalid instance '%s'", instanceID)
 			respChan <- err
 			return err
 		}
 		//start autostart instance in share storage
-		if ins.AutoStart && !ins.Running{
-			if err = manager.util.StartInstance(instanceID);err != nil{
+		if ins.AutoStart && !ins.Running {
+			if err = manager.util.StartInstance(instanceID); err != nil {
 				log.Printf("<instance> start migrated instance '%s'('%s') fail: %s", ins.Name, instanceID, err.Error())
 				respChan <- err
 				return err
@@ -1757,8 +1757,8 @@ func (manager *InstanceManager) handleMigrateInstances(instances []string, respC
 
 func (manager *InstanceManager) handleRemoveEventListener(listener string) (err error) {
 	_, exists := manager.eventListeners[listener]
-	if !exists{
-		err =fmt.Errorf("invalid listener '%s'", listener)
+	if !exists {
+		err = fmt.Errorf("invalid listener '%s'", listener)
 		return
 	}
 	delete(manager.eventListeners, listener)
@@ -1766,9 +1766,9 @@ func (manager *InstanceManager) handleRemoveEventListener(listener string) (err 
 	return nil
 }
 
-func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, respChan chan InstanceResult) (err error){
+func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, respChan chan InstanceResult) (err error) {
 	defer func() {
-		if err != nil{
+		if err != nil {
 			respChan <- InstanceResult{Error: err}
 		}
 	}()
@@ -1777,18 +1777,18 @@ func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, re
 	)
 	var ins InstanceStatus
 	var exists bool
-	if ins, exists = manager.instances[instanceID]; !exists{
+	if ins, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		return
 	}
 	var newSecret = manager.generatePassword(MonitorSecretLength)
 	var monitorProtocol string
-	if nil != ins.Template{
+	if nil != ins.Template {
 		monitorProtocol = ins.Template.Control
-	}else{
+	} else {
 		monitorProtocol = RemoteControlVNC
 	}
-	if err = manager.util.ResetMonitorSecret(instanceID, monitorProtocol, ins.MonitorPort, newSecret); err != nil{
+	if err = manager.util.ResetMonitorSecret(instanceID, monitorProtocol, ins.MonitorPort, newSecret); err != nil {
 		err = fmt.Errorf("reset monitor secret fail: %s", err.Error())
 		return
 	}
@@ -1799,41 +1799,41 @@ func (manager *InstanceManager) handleResetMonitorPassword(instanceID string, re
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleSyncAddressAllocation(allocationMode string) (err error){
-	if AddressAllocationNone == allocationMode{
+func (manager *InstanceManager) handleSyncAddressAllocation(allocationMode string) (err error) {
+	if AddressAllocationNone == allocationMode {
 		return
 	}
 	var modified = false
 	var modifiedCount = 0
-	for id, ins := range manager.instances{
-		if allocationMode != ins.AddressAllocation{
+	for id, ins := range manager.instances {
+		if allocationMode != ins.AddressAllocation {
 			ins.AddressAllocation = allocationMode
-			if !modified{
+			if !modified {
 				modified = true
 			}
 			manager.instances[id] = ins
 			modifiedCount++
 		}
 	}
-	if modified{
+	if modified {
 		log.Printf("<instance> update address allocation of %d instance(s) to mode '%s'", modifiedCount, allocationMode)
 		return manager.saveConfig()
 	}
 	return
 }
 
-//Security Policy
-func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respChan chan InstanceResult) (err error){
+// Security Policy
+func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respChan chan InstanceResult) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- InstanceResult{Error: err}
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		var policy = SecurityPolicy{Accept: true}
-		if err = manager.util.InitialDomainNwfilter(instanceID, policy); err != nil{
+		if err = manager.util.InitialDomainNwfilter(instanceID, policy); err != nil {
 			err = fmt.Errorf("initial nwfilter for guest '%s' fail: %s", err.Error())
 			respChan <- InstanceResult{Error: err}
 			return
@@ -1850,24 +1850,24 @@ func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respC
 	return nil
 }
 
-func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error) (err error){
+func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, rule SecurityPolicyRule, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
 	}
-	for currentIndex, currentRule := range instance.Security.Rules{
+	for currentIndex, currentRule := range instance.Security.Rules {
 		if currentRule.TargetPort == rule.TargetPort &&
 			currentRule.Protocol == rule.Protocol &&
 			currentRule.SourceAddress == rule.SourceAddress &&
-			currentRule.TargetAddress == rule.TargetAddress{
+			currentRule.TargetAddress == rule.TargetAddress {
 			err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
 				rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
 			respChan <- err
@@ -1875,16 +1875,16 @@ func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, r
 		}
 	}
 	instance.Security.Rules = append(instance.Security.Rules, rule)
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
 	}
 	manager.instances[instanceID] = instance
-	if rule.Accept{
+	if rule.Accept {
 		log.Printf("<instance> %s:%s->%s:%d enabled on instance '%s'",
 			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
-	}else{
+	} else {
 		log.Printf("<instance> %s:%s->%s:%d disabled on instance '%s'",
 			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}
@@ -1893,56 +1893,55 @@ func (manager *InstanceManager) handleAddSecurityPolicyRule(instanceID string, r
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error) (err error){
+func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string, index int, rule SecurityPolicyRule, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
 	}
-	if index >= len(instance.Security.Rules){
+	if index >= len(instance.Security.Rules) {
 		err = fmt.Errorf("invalid rule index %d for instance %s", index, instance.Name)
 		respChan <- err
 		return
 	}
-	for currentIndex, currentRule := range instance.Security.Rules{
+	for currentIndex, currentRule := range instance.Security.Rules {
 		if currentRule.TargetPort == rule.TargetPort &&
 			currentRule.Protocol == rule.Protocol &&
 			currentRule.SourceAddress == rule.SourceAddress &&
-			currentRule.TargetAddress == rule.TargetAddress{
-			if index == currentIndex{
-				if rule.Accept == currentRule.Accept{
+			currentRule.TargetAddress == rule.TargetAddress {
+			if index == currentIndex {
+				if rule.Accept == currentRule.Accept {
 					err = errors.New("no need to change")
 					respChan <- err
 					return
 				}
-			}else{
+			} else {
 				err = fmt.Errorf("%s:%s->%s:%d already defined on %dth rule of instance '%s'",
 					rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, currentIndex, instance.Name)
 				respChan <- err
 				return
 			}
 
-
 		}
 	}
 	instance.Security.Rules[index] = rule
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
 	}
 	manager.instances[instanceID] = instance
-	if rule.Accept{
+	if rule.Accept {
 		log.Printf("<instance> %s:%s->%s:%d enabled on instance '%s'",
 			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
-	}else{
+	} else {
 		log.Printf("<instance> %s:%s->%s:%d disabled on instance '%s'",
 			rule.Protocol, rule.SourceAddress, rule.TargetAddress, rule.TargetPort, instance.Name)
 	}
@@ -1951,32 +1950,32 @@ func (manager *InstanceManager) handleModifySecurityPolicyRule(instanceID string
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleRemoveSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+func (manager *InstanceManager) handleRemoveSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
 	}
 	var ruleCount = len(instance.Security.Rules)
-	if index >= ruleCount{
+	if index >= ruleCount {
 		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
 		respChan <- err
 		return
 	}
-	if index == ruleCount - 1 {
+	if index == ruleCount-1 {
 		//last
 		instance.Security.Rules = instance.Security.Rules[:index]
-	}else{
-		instance.Security.Rules = append(instance.Security.Rules[:index], instance.Security.Rules[index + 1:]...)
+	} else {
+		instance.Security.Rules = append(instance.Security.Rules[:index], instance.Security.Rules[index+1:]...)
 	}
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
@@ -1987,34 +1986,34 @@ func (manager *InstanceManager) handleRemoveSecurityPolicyRule(instanceID string
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error) (err error){
+func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instanceID string, accept bool, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
-	}else if instance.Security.Accept == accept{
+	} else if instance.Security.Accept == accept {
 		err = errors.New("no need to change")
 		respChan <- err
 		return
-	}else{
+	} else {
 		instance.Security.Accept = accept
 	}
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
 	}
 	manager.instances[instanceID] = instance
-	if accept{
+	if accept {
 		log.Printf("<instance> instance '%s' accept incoming connections by default", instance.Name)
-	}else{
+	} else {
 		log.Printf("<instance> instance '%s' reject incoming connections by default", instance.Name)
 	}
 
@@ -2022,34 +2021,34 @@ func (manager *InstanceManager) handleChangeDefaultSecurityPolicyAction(instance
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handlePullUpSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+func (manager *InstanceManager) handlePullUpSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
 	}
 	var ruleCount = len(instance.Security.Rules)
-	if index >= ruleCount{
+	if index >= ruleCount {
 		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
 		respChan <- err
 		return
-	}else if 0 == index{
+	} else if 0 == index {
 		err = errors.New("already on top")
 		respChan <- err
 		return
 	}
 	//swap
-	var previous = instance.Security.Rules[index - 1]
-	instance.Security.Rules[index - 1] = instance.Security.Rules[index]
+	var previous = instance.Security.Rules[index-1]
+	instance.Security.Rules[index-1] = instance.Security.Rules[index]
 	instance.Security.Rules[index] = previous
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
@@ -2060,35 +2059,35 @@ func (manager *InstanceManager) handlePullUpSecurityPolicyRule(instanceID string
 	return manager.saveConfig()
 }
 
-func (manager *InstanceManager) handlePushDownSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error){
+func (manager *InstanceManager) handlePushDownSecurityPolicyRule(instanceID string, index int, respChan chan error) (err error) {
 	var instance InstanceStatus
 	var exists bool
-	if instance, exists = manager.instances[instanceID]; !exists{
+	if instance, exists = manager.instances[instanceID]; !exists {
 		err = fmt.Errorf("invalid instance '%s'", instanceID)
 		respChan <- err
 		return
 	}
-	if nil == instance.Security{
+	if nil == instance.Security {
 		err = fmt.Errorf("no security policy available for instance '%s'", instance.Name)
 		respChan <- err
 		return
 	}
 	var ruleCount = len(instance.Security.Rules)
-	if index >= ruleCount{
+	if index >= ruleCount {
 		err = fmt.Errorf("invalid rule index %d for instance '%s'", index, instance.Name)
 		respChan <- err
 		return
 	}
-	if ruleCount - 1 == index{
+	if ruleCount-1 == index {
 		err = errors.New("already on bottom")
 		respChan <- err
 		return
 	}
 	//swap
-	var next = instance.Security.Rules[index + 1]
-	instance.Security.Rules[index + 1] = instance.Security.Rules[index]
+	var next = instance.Security.Rules[index+1]
+	instance.Security.Rules[index+1] = instance.Security.Rules[index]
 	instance.Security.Rules[index] = next
-	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil{
+	if err = manager.util.SyncDomainNwfilter(instanceID, instance.Security); err != nil {
 		err = fmt.Errorf("sync nwfilter of instance '%s' fail: %s", instance.Name, err.Error())
 		respChan <- err
 		return
@@ -2151,7 +2150,7 @@ func (status *InstanceStatus) Marshal(message framework.Message) error {
 	return nil
 }
 
-func (manager *InstanceManager) StartCPUMonitor(status *InstanceStatus) (error) {
+func (manager *InstanceManager) StartCPUMonitor(status *InstanceStatus) error {
 	times, _, err := manager.util.GetCPUTimes(status.ID)
 	if err != nil {
 		log.Printf("<instance> start monitor CPU times of '%s' fail: %s", status.ID, err.Error())
@@ -2164,7 +2163,7 @@ func (manager *InstanceManager) StartCPUMonitor(status *InstanceStatus) (error) 
 	return nil
 }
 
-func (manager *InstanceManager) apiPath(path string) string{
+func (manager *InstanceManager) apiPath(path string) string {
 	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
 }
 

@@ -3,15 +3,15 @@ package main
 import (
 	"fmt"
 	"github.com/libvirt/libvirt-go"
+	"github.com/project-nano/cell/service"
 	"github.com/project-nano/framework"
 	"log"
-	"github.com/project-nano/cell/service"
 	"os"
 	"path/filepath"
 )
 
 const (
-	CurrentVersion = "1.3.1"
+	CurrentVersion = "1.4.0"
 )
 
 type CellService struct {
@@ -27,19 +27,19 @@ type CellService struct {
 	dhcpService    *service.DHCPService
 }
 
-func CreateCellService(config DomainConfig, workingPath string) (service *CellService, err error){
+func CreateCellService(config DomainConfig, workingPath string) (service *CellService, err error) {
 	var dataPath = filepath.Join(workingPath, DataPathName)
-	if _, err = os.Stat(dataPath);os.IsNotExist(err){
-		if err = os.Mkdir(dataPath, DefaultPathPerm);err != nil{
+	if _, err = os.Stat(dataPath); os.IsNotExist(err) {
+		if err = os.Mkdir(dataPath, DefaultPathPerm); err != nil {
 			err = fmt.Errorf("create data path '%s' fail: %s", dataPath, err.Error())
 			return
-		}else{
+		} else {
 			log.Printf("data path '%s' created", dataPath)
 		}
 	}
 	service = &CellService{}
 	service.DataPath = dataPath
-	if service.EndpointService, err = framework.CreatePeerEndpoint(config.GroupAddress, config.GroupPort, config.Domain); err != nil{
+	if service.EndpointService, err = framework.CreatePeerEndpoint(config.GroupAddress, config.GroupPort, config.Domain); err != nil {
 		err = fmt.Errorf("create new endpoint fail: %s", err.Error())
 		return
 	}
@@ -127,10 +127,10 @@ func (cell *CellService) OnServiceConnected(name string, t framework.ServiceType
 	}
 }
 
-func (cell *CellService) OnServiceDisconnected(name string, t framework.ServiceType, gracefullyClose bool){
-	if gracefullyClose{
+func (cell *CellService) OnServiceDisconnected(name string, t framework.ServiceType, gracefullyClose bool) {
+	if gracefullyClose {
 		log.Printf("<cell> service %s closed by remote, type %d", name, t)
-	}else{
+	} else {
 		log.Printf("<cell> service %s lost, type %d", name, t)
 	}
 	if t == framework.ServiceTypeCore {
@@ -169,13 +169,13 @@ func (cell *CellService) InitialEndpoint() error {
 		return err
 	}
 	var networkResources = cell.insManager.GetInstanceNetworkResources()
-	if err = cell.networkManager.SyncInstanceResources(networkResources); err != nil{
+	if err = cell.networkManager.SyncInstanceResources(networkResources); err != nil {
 		return err
 	}
-	if cell.initiator, err = service.CreateInitiator(cell.networkManager, cell.insManager); err != nil{
+	if cell.initiator, err = service.CreateInitiator(cell.networkManager, cell.insManager); err != nil {
 		return err
 	}
-	if cell.dhcpService, err = service.CreateDHCPService(cell.networkManager); err != nil{
+	if cell.dhcpService, err = service.CreateDHCPService(cell.networkManager); err != nil {
 		return err
 	}
 
@@ -199,10 +199,10 @@ func (cell *CellService) OnEndpointStarted() (err error) {
 	if err = cell.networkManager.Start(); err != nil {
 		return err
 	}
-	if err = cell.initiator.Start();err != nil{
+	if err = cell.initiator.Start(); err != nil {
 		return
 	}
-	if err = cell.dhcpService.Start();err != nil{
+	if err = cell.dhcpService.Start(); err != nil {
 		return
 	}
 	if err = cell.transManager.Start(); err != nil {
@@ -215,7 +215,7 @@ func (cell *CellService) OnEndpointStopped() {
 	if err := cell.transManager.Stop(); err != nil {
 		log.Printf("<cell> stop transaction manger fail: %s", err.Error())
 	}
-	if err := cell.dhcpService.Stop(); err != nil{
+	if err := cell.dhcpService.Stop(); err != nil {
 		log.Printf("<cell> stop dhcp service fail: %s", err.Error())
 	}
 	if err := cell.initiator.Stop(); err != nil {

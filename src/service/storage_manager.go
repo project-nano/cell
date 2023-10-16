@@ -48,7 +48,7 @@ const (
 type storageCommandType int
 
 const (
-	storageCommandCreateVolume    = iota
+	storageCommandCreateVolume = iota
 	storageCommandDeleteVolume
 	storageCommandWriteDiskImage
 	storageCommandReadDiskImage
@@ -182,19 +182,19 @@ const (
 )
 
 func (c storageCommandType) toString() string {
-	if c >= storageCommandInvalid{
-		return  "invalid"
+	if c >= storageCommandInvalid {
+		return "invalid"
 	}
 	return storageCommandNames[c]
 }
 
 func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *StorageManager, err error) {
 	const (
-		StorageFilename       = "storage.data"
-		DefaultQueueSize      = 1 << 10
+		StorageFilename  = "storage.data"
+		DefaultQueueSize = 1 << 10
 	)
 	//check const
-	if storageCommandInvalid != len(storageCommandNames){
+	if storageCommandInvalid != len(storageCommandNames) {
 		err = fmt.Errorf("insufficient command names %d/%d", len(storageCommandNames), storageCommandInvalid)
 		return
 	}
@@ -222,7 +222,7 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *S
 	if err = manager.loadConfig(); err != nil {
 		return nil, err
 	}
-	if err = manager.startAllScheduler(); err != nil{
+	if err = manager.startAllScheduler(); err != nil {
 		err = fmt.Errorf("start all scheduler fail: %s", err.Error())
 		return
 	}
@@ -230,19 +230,19 @@ func CreateStorageManager(dataPath string, connect *libvirt.Connect) (manager *S
 	return manager, nil
 }
 
-func (manager *StorageManager) Start() error{
+func (manager *StorageManager) Start() error {
 	return manager.runner.Start()
 }
 
-func (manager *StorageManager) Stop() error{
+func (manager *StorageManager) Stop() error {
 	return manager.runner.Stop()
 }
 
-func (manager *StorageManager)notifyStoragePathsChanged(){
+func (manager *StorageManager) notifyStoragePathsChanged() {
 	manager.outputStorageEventChan <- manager.localSystemDiskPaths
 }
 
-func (manager *StorageManager)GetOutputEventChannel() chan []string{
+func (manager *StorageManager) GetOutputEventChannel() chan []string {
 	return manager.outputStorageEventChan
 }
 
@@ -336,16 +336,16 @@ func (manager *StorageManager) handleCommand(cmd storageCommand) {
 	}
 }
 
-func (manager *StorageManager) UsingStorage(name, protocol, host, target string, respChan chan StorageResult){
-	manager.commands <- storageCommand{Type: storageCommandSwitchStorage, Pool:name, Protocol:protocol, Host:host, Target:target, ResultChan:respChan}
+func (manager *StorageManager) UsingStorage(name, protocol, host, target string, respChan chan StorageResult) {
+	manager.commands <- storageCommand{Type: storageCommandSwitchStorage, Pool: name, Protocol: protocol, Host: host, Target: target, ResultChan: respChan}
 }
 
-func (manager *StorageManager) DetachStorage(respChan chan error){
-	manager.commands <- storageCommand{Type: storageCommandDetachStorage, ErrorChan:respChan}
+func (manager *StorageManager) DetachStorage(respChan chan error) {
+	manager.commands <- storageCommand{Type: storageCommandDetachStorage, ErrorChan: respChan}
 }
 
-func (manager *StorageManager) GetAttachDevices(respChan chan StorageResult){
-	manager.commands <- storageCommand{Type:storageCommandGetAttachDevice, ResultChan:respChan}
+func (manager *StorageManager) GetAttachDevices(respChan chan StorageResult) {
+	manager.commands <- storageCommand{Type: storageCommandGetAttachDevice, ResultChan: respChan}
 }
 
 func (manager *StorageManager) CreateVolumes(groupName string, systemSize uint64, dataSize []uint64, bootType BootType, resp chan StorageResult) {
@@ -400,19 +400,19 @@ func (manager *StorageManager) RestoreSnapshot(groupName, snapshot string, respC
 	manager.commands <- storageCommand{Type: storageCommandRestoreSnapshot, Instance: groupName, Snapshot: snapshot, ErrorChan: respChan}
 }
 
-func (manager *StorageManager) AttachVolumeGroup(groups []string, respChan chan error){
-	manager.commands <- storageCommand{Type:storageCommandAttachVolume, Groups:groups, ErrorChan:respChan}
+func (manager *StorageManager) AttachVolumeGroup(groups []string, respChan chan error) {
+	manager.commands <- storageCommand{Type: storageCommandAttachVolume, Groups: groups, ErrorChan: respChan}
 }
 
-func (manager *StorageManager) DetachVolumeGroup(groups []string, respChan chan error){
-	manager.commands <- storageCommand{Type:storageCommandDetachVolume, Groups:groups, ErrorChan:respChan}
+func (manager *StorageManager) DetachVolumeGroup(groups []string, respChan chan error) {
+	manager.commands <- storageCommand{Type: storageCommandDetachVolume, Groups: groups, ErrorChan: respChan}
 }
 
-func (manager *StorageManager) QueryStoragePaths(respChan chan StorageResult){
-	manager.commands <- storageCommand{Type:storageCommandQueryStoragePaths, ResultChan: respChan}
+func (manager *StorageManager) QueryStoragePaths(respChan chan StorageResult) {
+	manager.commands <- storageCommand{Type: storageCommandQueryStoragePaths, ResultChan: respChan}
 }
 
-func (manager *StorageManager) ChangeDefaultStoragePath(target string, respChan chan error){
+func (manager *StorageManager) ChangeDefaultStoragePath(target string, respChan chan error) {
 	manager.commands <- storageCommand{Type: storageCommandChangeDefaultStoragePath, Target: target, ErrorChan: respChan}
 }
 
@@ -425,12 +425,12 @@ type storageDataConfig struct {
 	CurrentPool string                         `json:"current_pool,omitempty"`
 }
 
-func (manager *StorageManager) generateLocalPoolPath(poolName string) (poolPath string, err error){
-	if StoragePoolModeLocal != manager.storageMode{
+func (manager *StorageManager) generateLocalPoolPath(poolName string) (poolPath string, err error) {
+	if StoragePoolModeLocal != manager.storageMode {
 		err = errors.New("must running in local mode")
 		return
 	}
-	if 0 == len(manager.localSystemDiskPaths){
+	if 0 == len(manager.localSystemDiskPaths) {
 		err = errors.New("no local path available")
 		return
 	}
@@ -439,21 +439,21 @@ func (manager *StorageManager) generateLocalPoolPath(poolName string) (poolPath 
 	return
 }
 
-func (manager *StorageManager) saveVolumesMeta(groupName string) (err error){
-	if currentPool, exists := manager.pools[manager.currentPool]; exists{
-		if currentPool.Mode == StorageModeNFS{
+func (manager *StorageManager) saveVolumesMeta(groupName string) (err error) {
+	if currentPool, exists := manager.pools[manager.currentPool]; exists {
+		if currentPool.Mode == StorageModeNFS {
 			//save volume meta
 			var metaFile = filepath.Join(currentPool.Target, fmt.Sprintf("%s.%s", groupName, VolumeMetaFileSuffix))
 			group, exists := manager.groups[groupName]
-			if !exists{
+			if !exists {
 				err = fmt.Errorf("invalid group '%s'", groupName)
 				return err
 			}
 			data, err := json.MarshalIndent(group, "", " ")
-			if err != nil{
+			if err != nil {
 				return err
 			}
-			if err = ioutil.WriteFile(metaFile, data, ConfigFilePerm); err != nil{
+			if err = ioutil.WriteFile(metaFile, data, ConfigFilePerm); err != nil {
 				return err
 			}
 			log.Printf("<storage> volume meta for '%s' saved to '%s'", groupName, metaFile)
@@ -462,13 +462,13 @@ func (manager *StorageManager) saveVolumesMeta(groupName string) (err error){
 	return manager.saveConfig()
 }
 
-func (manager *StorageManager) removeVolumesMeta(groupName string) (err error){
-	if currentPool, exists := manager.pools[manager.currentPool]; exists{
-		if currentPool.Mode == StorageModeNFS{
+func (manager *StorageManager) removeVolumesMeta(groupName string) (err error) {
+	if currentPool, exists := manager.pools[manager.currentPool]; exists {
+		if currentPool.Mode == StorageModeNFS {
 			//save volume meta
 			var metaFile = filepath.Join(currentPool.Target, fmt.Sprintf("%s.%s", groupName, VolumeMetaFileSuffix))
-			if _, err = os.Stat(metaFile); !os.IsNotExist(err){
-				if err = os.Remove(metaFile); err != nil{
+			if _, err = os.Stat(metaFile); !os.IsNotExist(err) {
+				if err = os.Remove(metaFile); err != nil {
 					return err
 				}
 				log.Printf("<storage> volume meta for '%s' removed", groupName)
@@ -515,19 +515,19 @@ func (manager *StorageManager) loadConfig() (err error) {
 		if 0 != len(config.Pools) {
 			var defaultPool = config.Pools[DefaultLocalPoolName]
 			var defaultPath = filepath.Dir(defaultPool.Target)
-			if "" == config.Mode{
+			if "" == config.Mode {
 				manager.storageMode = defaultPool.Mode
-			}else if manager.storageMode, err = storageModeFromString(config.Mode); err != nil{
+			} else if manager.storageMode, err = storageModeFromString(config.Mode); err != nil {
 				return
 			}
-			if 0 == len(config.SystemPaths){
+			if 0 == len(config.SystemPaths) {
 				manager.localSystemDiskPaths = []string{defaultPath}
-			}else{
+			} else {
 				manager.localSystemDiskPaths = config.SystemPaths
 			}
-			if 0 == len(config.DataPaths){
+			if 0 == len(config.DataPaths) {
 				manager.localDataDiskPaths = []string{defaultPath}
-			}else{
+			} else {
 				manager.localDataDiskPaths = config.DataPaths
 			}
 			manager.pools = config.Pools
@@ -563,7 +563,7 @@ func (manager *StorageManager) generateDefaultConfig() (err error) {
 		log.Printf("<storage> found default storage pool '%s', path '%s'", poolName, backingPool.Target)
 	} else {
 		var poolPath string
-		if poolPath, err = manager.generateLocalPoolPath(poolName); err != nil{
+		if poolPath, err = manager.generateLocalPoolPath(poolName); err != nil {
 			err = fmt.Errorf("generate local path fail: %s", err.Error())
 			return
 		}
@@ -579,32 +579,32 @@ func (manager *StorageManager) generateDefaultConfig() (err error) {
 	return nil
 }
 
-func (manager *StorageManager) startAllScheduler() (err error){
+func (manager *StorageManager) startAllScheduler() (err error) {
 	for poolName, pool := range manager.pools {
-		if pool.Mode == StoragePoolModeNFS{
+		if pool.Mode == StoragePoolModeNFS {
 			mounted, err := manager.utility.IsNFSPoolMounted(poolName)
 			if mounted {
 				pool.Attached = true
 				log.Printf("<storage> nfs pool '%s' mounted", poolName)
-			}else if poolName != manager.currentPool{
+			} else if poolName != manager.currentPool {
 				pool.Attached = false
 				pool.AttachError = err.Error()
 				log.Printf("<storage> warning: check nfs pool '%s' fail: %s", poolName, err.Error())
-			}else{
+			} else {
 				//primary mount fail, must resume before start
 				log.Printf("<storage> warning: primary nfs pool '%s' not mounted, try restart pool...", poolName)
-				if err = manager.utility.StartPool(poolName); err != nil{
+				if err = manager.utility.StartPool(poolName); err != nil {
 					pool.Attached = false
 					pool.AttachError = err.Error()
 					log.Printf("<storage> warning: restart nfs pool '%s' fail: %s", poolName, err.Error())
 					err = fmt.Errorf("start nfs pool '%s' fail: %s", poolName, err.Error())
 					return err
-				}else{
+				} else {
 					pool.Attached = true
 					log.Printf("<storage> restart nfs pool '%s' success", poolName)
 				}
 			}
-			if !manager.nfsEnabled{
+			if !manager.nfsEnabled {
 				manager.nfsEnabled = true
 			}
 		}
@@ -699,7 +699,7 @@ func (manager *StorageManager) handleDeleteVolumes(instanceID string, resp chan 
 		resp <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("group '%s' is locked for update", instanceID)
 		resp <- err
 		return err
@@ -729,11 +729,11 @@ func (manager *StorageManager) handleDeleteVolumes(instanceID string, resp chan 
 		poolCount++
 		volCount += len(vols)
 	}
-	for name, snapshot := range group.Snapshots{
-		for volName, volFile := range snapshot.Files{
-			if err := os.Remove(volFile); err != nil{
+	for name, snapshot := range group.Snapshots {
+		for volName, volFile := range snapshot.Files {
+			if err := os.Remove(volFile); err != nil {
 				log.Printf("<storage> warning: remove vol '%s' of snapshot '%s.%s'", volName, instanceID, name)
-			}else {
+			} else {
 				log.Printf("<storage> vol '%s' of snapshot '%s.%s' removed", volName, instanceID, name)
 			}
 		}
@@ -759,7 +759,7 @@ func (manager *StorageManager) handleReadDiskImage(id framework.SessionID, group
 		startChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		startChan <- err
 		return err
@@ -796,36 +796,45 @@ func (manager *StorageManager) handleReadDiskImage(id framework.SessionID, group
 }
 
 func (manager *StorageManager) handleWriteDiskImage(id framework.SessionID, groupName, targetVol, sourceImage, mediaHost string, mediaPort uint,
-	startChan chan error, progress chan uint, resultChan chan StorageResult) error {
+	startChan chan error, progress chan uint, resultChan chan StorageResult) (err error) {
+	var result = StorageResult{}
+	defer func() {
+		if nil != err {
+			// only notify when error occurs
+			result.Error = err
+			resultChan <- result
+		}
+	}()
 	group, exists := manager.groups[groupName]
 	if !exists {
-		err := fmt.Errorf("invalid instance '%s'", groupName)
-		startChan <- err
-		return err
+		err = fmt.Errorf("invalid instance '%s'", groupName)
+		return
 	}
-	if group.Locked{
-		err := fmt.Errorf("volume group '%s' locked for update", groupName)
-		startChan <- err
-		return err
+	if group.Locked {
+		err = fmt.Errorf("volume group '%s' locked for update", groupName)
+		return
 	}
 	if group.System.Name != targetVol {
-		err := fmt.Errorf("invalid system volume name '%s'", targetVol)
-		startChan <- err
-		return err
+		err = fmt.Errorf("invalid system volume name '%s'", targetVol)
+		return
+	}
+	//check snapshots
+	if 0 != len(group.Snapshots) {
+		err = fmt.Errorf("can't create disk image when snapshots available in source instance '%s'", groupName)
+		return
 	}
 	var path = group.System.Path
 	var poolName = group.System.Pool
 
-	if _, exists := manager.tasks[id]; exists {
-		err := fmt.Errorf("task %08X not finished", id)
-		startChan <- err
-		return err
+	if _, exists = manager.tasks[id]; exists {
+		err = fmt.Errorf("task %08X not finished", id)
+		return
 	}
-	scheduler, exists := manager.schedulers[poolName]
+	var scheduler *IOScheduler
+	scheduler, exists = manager.schedulers[poolName]
 	if !exists {
-		err := fmt.Errorf("no scheduler available for pool '%s'", poolName)
-		startChan <- err
-		return err
+		err = fmt.Errorf("no scheduler available for pool '%s'", poolName)
+		return
 	}
 	group.Locked = true
 	manager.groups[groupName] = group
@@ -847,7 +856,7 @@ func (manager *StorageManager) handleResizeVolume(id framework.SessionID, groupN
 		respChan <- StorageResult{Error: err}
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		respChan <- StorageResult{Error: err}
 		return err
@@ -901,7 +910,7 @@ func (manager *StorageManager) handleShrinkVolume(id framework.SessionID, groupN
 		respChan <- StorageResult{Error: err}
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		respChan <- StorageResult{Error: err}
 		return err
@@ -976,57 +985,57 @@ func (manager *StorageManager) handleSchedulerResult(result SchedulerResult) {
 	delete(manager.tasks, taskID)
 }
 
-func (manager *StorageManager) handleQuerySnapshot(groupName string, respChan chan StorageResult) (err error){
+func (manager *StorageManager) handleQuerySnapshot(groupName string, respChan chan StorageResult) (err error) {
 	var result []SnapshotConfig
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
-	if "" == group.BaseSnapshot{
+	if "" == group.BaseSnapshot {
 		//no snapshot available
-		respChan <- StorageResult{SnapshotList:result}
+		respChan <- StorageResult{SnapshotList: result}
 		return nil
 	}
-	for _, snapshot := range group.Snapshots{
+	for _, snapshot := range group.Snapshots {
 		result = append(result, snapshot.SnapshotConfig)
 	}
-	respChan <- StorageResult{SnapshotList:result}
+	respChan <- StorageResult{SnapshotList: result}
 	return nil
 }
 
-func (manager *StorageManager) handleGetSnapshot(groupName, snapshotName string, respChan chan StorageResult)  (err error){
+func (manager *StorageManager) handleGetSnapshot(groupName, snapshotName string, respChan chan StorageResult) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
 	snapshot, exists := group.Snapshots[snapshotName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
-	respChan <- StorageResult{Snapshot:snapshot.SnapshotConfig}
+	respChan <- StorageResult{Snapshot: snapshot.SnapshotConfig}
 	return nil
 }
 
-func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, description string, respChan chan error)  (err error){
+func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, description string, respChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		respChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		respChan <- err
 		return err
 	}
 	_, exists = group.Snapshots[snapshotName]
-	if exists{
+	if exists {
 		err = fmt.Errorf("snapshot '%s.%s' exists", groupName, snapshotName)
 		respChan <- err
 		return err
@@ -1045,19 +1054,19 @@ func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, des
 	snapshot.Files[group.System.Name] = backingSystemPath
 	targets[group.System.Path] = backingSystemPath
 
-	for index, volume := range group.Data{
+	for index, volume := range group.Data {
 		var backingPath = filepath.Join(basePath, fmt.Sprintf("%s_%s_%d.%s", groupName, snapshotName, index, FormatQcow2Suffix))
 		snapshot.Files[volume.Name] = backingPath
 		targets[volume.Path] = backingPath
 	}
 
-	if nil == group.Snapshots{
-		group.Snapshots = map[string]ManagedSnapshot{snapshotName:snapshot}
-	}else{
+	if nil == group.Snapshots {
+		group.Snapshots = map[string]ManagedSnapshot{snapshotName: snapshot}
+	} else {
 		group.Snapshots[snapshotName] = snapshot
 	}
 	scheduler, exists := manager.schedulers[group.System.Pool]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
 		respChan <- err
 		return err
@@ -1069,46 +1078,46 @@ func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, des
 	return nil
 }
 
-func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName string, respChan chan error)  (err error){
+func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName string, respChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		respChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		respChan <- err
 		return err
 	}
-	if snapshotName == group.ActiveSnapshot{
+	if snapshotName == group.ActiveSnapshot {
 		err = errors.New("Not support delete active snapshot")
 		respChan <- err
 		return err
 	}
-	if snapshotName == group.BaseSnapshot{
+	if snapshotName == group.BaseSnapshot {
 		err = errors.New("Not support delete root snapshot")
 		respChan <- err
 		return err
 	}
 	snapshot, exists := group.Snapshots[snapshotName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
 		respChan <- err
 		return err
 	}
-	for name, s := range group.Snapshots{
-		if name == snapshotName{
+	for name, s := range group.Snapshots {
+		if name == snapshotName {
 			continue
 		}
-		if snapshotName == s.Backing{
+		if snapshotName == s.Backing {
 			err = fmt.Errorf("snapshot '%s' is depend on '%s', can not delete", name, snapshotName)
 			respChan <- err
 			return err
 		}
 	}
 	scheduler, exists := manager.schedulers[group.System.Pool]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
 		respChan <- err
 		return err
@@ -1120,20 +1129,20 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 	return nil
 }
 
-func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName string, respChan chan error)  (err error){
+func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName string, respChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		respChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		err := fmt.Errorf("volume group '%s' locked for update", groupName)
 		respChan <- err
 		return err
 	}
 	snapshot, exists := group.Snapshots[snapshotName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
 		respChan <- err
 		return err
@@ -1141,17 +1150,17 @@ func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName str
 	//system volume
 	var targets = map[string]string{}
 	systemBacking, exists := snapshot.Files[group.System.Name]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("no backing file for volume '%s' in snapshot '%s'", group.System.Name, snapshotName)
 		respChan <- err
 		return err
 	}
 	targets[group.System.Path] = systemBacking
 	//data volume
-	for _, volume := range group.Data{
+	for _, volume := range group.Data {
 		//todo: new data volume
 		backingPath, exists := snapshot.Files[volume.Name]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("no backing file for data volume '%s' in snapshot '%s'", volume.Name, snapshotName)
 			respChan <- err
 			return err
@@ -1160,7 +1169,7 @@ func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName str
 	}
 
 	scheduler, exists := manager.schedulers[group.System.Pool]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
 		respChan <- err
 		return err
@@ -1172,30 +1181,30 @@ func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName str
 	return nil
 }
 
-func (manager *StorageManager) handleUsingStorage(name, protocol, host, target string, respChan chan StorageResult) (err error){
+func (manager *StorageManager) handleUsingStorage(name, protocol, host, target string, respChan chan StorageResult) (err error) {
 	switch protocol {
 	case StorageProtocolNFS:
 		break
 	default:
 		err = fmt.Errorf("unsupport storage protocol '%s'", protocol)
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
-	if !manager.nfsEnabled{
-		if err = manager.utility.EnableNFSPools(); err != nil{
+	if !manager.nfsEnabled {
+		if err = manager.utility.EnableNFSPools(); err != nil {
 			log.Printf("<storage> enable nfs pools fail: %s", err.Error())
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
 		manager.nfsEnabled = true
 		log.Println("<storage> nfs pools enabled")
 	}
 	pool, exists := manager.pools[name]
-	if !exists{
+	if !exists {
 		backingPool, err := manager.utility.CreateNFSPool(name, host, target)
-		if err != nil{
+		if err != nil {
 			log.Printf("<storage> create nfs pool '%s' to %s:%s fail: %s", name, host, target, err.Error())
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
 		manager.pools[name] = ManagedStoragePool{backingPool, map[string]bool{}, true, ""}
@@ -1203,22 +1212,22 @@ func (manager *StorageManager) handleUsingStorage(name, protocol, host, target s
 		scheduler, err := CreateScheduler(name, manager.progressChan, manager.scheduleChan, manager.eventChan)
 		if err != nil {
 			log.Printf("<storage> create scheduler for nfs pool '%s' fail: %s", name, err.Error())
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
-		if err = scheduler.Start();err != nil{
+		if err = scheduler.Start(); err != nil {
 			log.Printf("<storage> start scheduler for nfs pool '%s' fail: %s", name, err.Error())
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
 		manager.schedulers[name] = scheduler
-		respChan <- StorageResult{Path:backingPool.Target}
+		respChan <- StorageResult{Path: backingPool.Target}
 		log.Printf("<storage> using new nfs pool '%s' to %s:%s", name, host, target)
 		return manager.saveConfig()
 	}
 
 	//exists
-	if name != manager.currentPool{
+	if name != manager.currentPool {
 		//change current pool
 		manager.currentPool = name
 		respChan <- StorageResult{Path: pool.Target}
@@ -1226,10 +1235,10 @@ func (manager *StorageManager) handleUsingStorage(name, protocol, host, target s
 		return manager.saveConfig()
 	}
 	//target changed
-	if pool.SourceHost != host || pool.SourceTarget != target{
-		if pool.StoragePool, err = manager.utility.ChangeNFSPool(name, host, target); err != nil{
+	if pool.SourceHost != host || pool.SourceTarget != target {
+		if pool.StoragePool, err = manager.utility.ChangeNFSPool(name, host, target); err != nil {
 			log.Printf("<storage> change nfs pool '%s' to %s:%s fail: %s", name, host, target, err.Error())
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
 		manager.pools[name] = pool
@@ -1238,15 +1247,15 @@ func (manager *StorageManager) handleUsingStorage(name, protocol, host, target s
 		return manager.saveConfig()
 	}
 	mounted, err := manager.utility.IsNFSPoolMounted(name)
-	if err != nil{
+	if err != nil {
 		log.Printf("<storage> check nfs pool '%s' fail: %s", name, err.Error())
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
-	if !mounted{
+	if !mounted {
 		err = fmt.Errorf("nfs pool '%s' not mounted", name)
 		log.Printf("<storage> nfs pool '%s' not ready: %s", name, err.Error())
-		respChan <- StorageResult{Error:err}
+		respChan <- StorageResult{Error: err}
 		return err
 	}
 	log.Printf("<storage> nfs pool '%s' ready", name)
@@ -1254,22 +1263,22 @@ func (manager *StorageManager) handleUsingStorage(name, protocol, host, target s
 	return nil
 }
 
-func (manager *StorageManager) handleGetAttachDevices(respChan chan StorageResult) (err error){
+func (manager *StorageManager) handleGetAttachDevices(respChan chan StorageResult) (err error) {
 	var result []AttachDeviceInfo
 	var attachCount, errorCount = 0, 0
-	for poolName, pool := range manager.pools{
-		if StoragePoolModeLocal == pool.Mode{
+	for poolName, pool := range manager.pools {
+		if StoragePoolModeLocal == pool.Mode {
 			continue
 		}
-		var device = AttachDeviceInfo{Name:poolName}
+		var device = AttachDeviceInfo{Name: poolName}
 		device.Path = pool.Target
 		switch pool.Mode {
 		case StoragePoolModeNFS:
 			device.Protocol = StorageProtocolNFS
 			device.Attached = pool.Attached
-			if pool.Attached{
+			if pool.Attached {
 				attachCount++
-			}else{
+			} else {
 				errorCount++
 				device.Error = pool.AttachError
 			}
@@ -1277,23 +1286,23 @@ func (manager *StorageManager) handleGetAttachDevices(respChan chan StorageResul
 		default:
 			log.Printf("<storage> unsupport storage mode %d of pool '%s'", pool.Mode, poolName)
 			err = fmt.Errorf("invalid storage mode %d", pool.Mode)
-			respChan <- StorageResult{Error:err}
+			respChan <- StorageResult{Error: err}
 			return err
 		}
 	}
-	if 0 != errorCount{
+	if 0 != errorCount {
 		log.Printf("<storage> %d device(s) attached, with %d failed device(s)", attachCount, errorCount)
-	}else {
+	} else {
 		log.Printf("<storage> %d device(s) attached", attachCount)
 	}
 
-	respChan <- StorageResult{Devices:result}
+	respChan <- StorageResult{Devices: result}
 	return nil
 }
 
-func (manager *StorageManager) handleDetachStorage(respChan chan error)  (err error){
+func (manager *StorageManager) handleDetachStorage(respChan chan error) (err error) {
 	//detach current nfs pool
-	if manager.currentPool == DefaultLocalPoolName{
+	if manager.currentPool == DefaultLocalPoolName {
 		log.Printf("<storage> no need to detach local pool '%s'", manager.currentPool)
 		respChan <- nil
 		return nil
@@ -1302,9 +1311,9 @@ func (manager *StorageManager) handleDetachStorage(respChan chan error)  (err er
 	{
 		//release scheduler
 		scheduler, exists := manager.schedulers[poolName]
-		if !exists{
+		if !exists {
 			log.Printf("<storage> warning: no scheduler available for pool '%s'", poolName)
-		}else{
+		} else {
 			scheduler.Stop()
 			delete(manager.schedulers, poolName)
 			log.Printf("<storage> scheduler of pool '%s' released", poolName)
@@ -1312,7 +1321,7 @@ func (manager *StorageManager) handleDetachStorage(respChan chan error)  (err er
 	}
 	{
 		//release pool
-		if err = manager.utility.DeleteNFSPool(poolName); err != nil{
+		if err = manager.utility.DeleteNFSPool(poolName); err != nil {
 			log.Printf("<storage> delete nfs pool '%s' fail: %s", poolName, err.Error())
 			respChan <- err
 			return nil
@@ -1326,7 +1335,7 @@ func (manager *StorageManager) handleDetachStorage(respChan chan error)  (err er
 	return manager.saveConfig()
 }
 
-func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan chan error) (err error){
+func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan chan error) (err error) {
 	currentPool, exists := manager.pools[manager.currentPool]
 	if !exists {
 		err = fmt.Errorf("current pool '%s' not exists", manager.currentPool)
@@ -1338,25 +1347,25 @@ func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan
 		respChan <- err
 		return err
 	}
-	if err = manager.utility.RefreshPool(manager.currentPool);err != nil{
+	if err = manager.utility.RefreshPool(manager.currentPool); err != nil {
 		respChan <- err
 		return err
 	}
-	for _, groupName := range groups{
+	for _, groupName := range groups {
 		var metaFile = filepath.Join(currentPool.Target, fmt.Sprintf("%s.%s", groupName, VolumeMetaFileSuffix))
 		data, err := ioutil.ReadFile(metaFile)
-		if err != nil{
+		if err != nil {
 			respChan <- err
 			return err
 		}
 		var group InstanceVolumeGroup
-		if err = json.Unmarshal(data, &group); err != nil{
+		if err = json.Unmarshal(data, &group); err != nil {
 			respChan <- err
 			return err
 		}
 		currentPool.Volumes[group.System.Name] = true
 		log.Printf("<storage> volume '%s' attached to pool '%s'", group.System.Name, currentPool.Name)
-		for _, dataVolume := range group.Data{
+		for _, dataVolume := range group.Data {
 			currentPool.Volumes[dataVolume.Name] = true
 			log.Printf("<storage> data volume '%s' attached to pool '%s'", dataVolume.Name, currentPool.Name)
 		}
@@ -1368,52 +1377,52 @@ func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan
 	return manager.saveConfig()
 }
 
-func (manager *StorageManager) handleDetachVolumeGroup(groups []string, respChan chan error) (err error){
-	if 0 == len(groups){
-		for groupName, _ := range manager.groups{
+func (manager *StorageManager) handleDetachVolumeGroup(groups []string, respChan chan error) (err error) {
+	if 0 == len(groups) {
+		for groupName, _ := range manager.groups {
 			groups = append(groups, groupName)
 		}
 	}
 	var targetVolumes = map[string][]string{}
-	for _, groupName := range groups{
+	for _, groupName := range groups {
 		group, exists := manager.groups[groupName]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("invalid group '%s'", groupName)
 			respChan <- err
 			return err
 		}
-		if group.Locked{
+		if group.Locked {
 			err = fmt.Errorf("group '%s' locked", groupName)
 			respChan <- err
 			return err
 		}
 		pool, exists := manager.pools[group.System.Pool]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("invalid pool '%s' with volume '%s'", group.System.Pool, group.System.Name)
 			respChan <- err
 			return err
 		}
-		if pool.Mode != StoragePoolModeNFS{
+		if pool.Mode != StoragePoolModeNFS {
 			err = fmt.Errorf("can not detach from pool '%s' with storage mode %d", pool.Name, pool.Mode)
 			respChan <- err
 			return err
 		}
 		volumes, _ := targetVolumes[pool.Name]
 		//system volume
-		if _, exists = pool.Volumes[group.System.Name]; !exists{
+		if _, exists = pool.Volumes[group.System.Name]; !exists {
 			err = fmt.Errorf("volume '%s' not attached to pool '%s'", group.System.Name, group.System.Pool)
 			respChan <- err
 			return err
 		}
 		volumes = append(volumes, group.System.Name)
 		//data volumes
-		for _, dataVolume := range group.Data{
-			if dataVolume.Pool != pool.Name{
+		for _, dataVolume := range group.Data {
+			if dataVolume.Pool != pool.Name {
 				err = fmt.Errorf("volume '%s' not attached in pool '%s'", dataVolume.Name, pool.Name)
 				respChan <- err
 				return err
 			}
-			if _, exists = pool.Volumes[dataVolume.Name]; !exists{
+			if _, exists = pool.Volumes[dataVolume.Name]; !exists {
 				err = fmt.Errorf("volume '%s' not attached to pool '%s'", dataVolume.Name, pool.Name)
 				respChan <- err
 				return err
@@ -1424,14 +1433,14 @@ func (manager *StorageManager) handleDetachVolumeGroup(groups []string, respChan
 		delete(manager.groups, groupName)
 		log.Printf("<storage> volume group '%s' detached", groupName)
 	}
-	for poolName, volumes := range targetVolumes{
+	for poolName, volumes := range targetVolumes {
 		pool, exists := manager.pools[poolName]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("invalid pool '%s'", poolName)
 			respChan <- err
 			return err
 		}
-		for _, volName := range volumes{
+		for _, volName := range volumes {
 			delete(pool.Volumes, volName)
 			log.Printf("<storage> volume '%s' detached from pool '%s'", volName, poolName)
 		}
@@ -1469,49 +1478,49 @@ func (manager *StorageManager) handleSchedulerEvent(event schedulerEvent) {
 	default:
 		err = fmt.Errorf("unsupported event type %d", event.Type)
 	}
-	if err != nil{
+	if err != nil {
 		log.Printf("<storage> handle scheduler event fail: %s", err.Error())
 	}
 }
 
-func (manager *StorageManager) handleVolumeTaskCompleted(taskName, groupName, volumeName string, taskError error) (err error){
+func (manager *StorageManager) handleVolumeTaskCompleted(taskName, groupName, volumeName string, taskError error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		group.Locked = false
 		manager.groups[groupName] = group
 		log.Printf("<storage> volume group '%s' unlocked for %s complete", groupName, taskName)
 	}
-	if taskError != nil{
+	if taskError != nil {
 		log.Printf("<storage> warning: %s volume '%s' fail: %s", taskName, volumeName, err.Error())
-	//}else{
-	//	log.Printf("<storage> debug: %s volume '%s' success", taskName, volumeName)
+		//}else{
+		//	log.Printf("<storage> debug: %s volume '%s' success", taskName, volumeName)
 	}
 	return nil
 }
 
-func (manager *StorageManager) handleCreateSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error){
+func (manager *StorageManager) handleCreateSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		errChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		group.Locked = false
 		manager.groups[groupName] = group
 		log.Printf("<storage> volume group '%s' unlocked for create snapshot complete", groupName)
 	}
 	snapshot, exists := group.Snapshots[snapshotName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s.%s'", groupName, snapshotName)
 		errChan <- err
 		return err
 	}
-	if taskError != nil{
+	if taskError != nil {
 		log.Printf("<storage> warning: create snapshot '%s.%s' fail: %s", groupName, snapshotName, err.Error())
 		delete(group.Snapshots, snapshotName)
 		manager.groups[groupName] = group
@@ -1520,20 +1529,20 @@ func (manager *StorageManager) handleCreateSnapshotCompleted(groupName, snapshot
 	}
 	snapshot.IsCurrent = true
 	snapshot.CreateTime = time.Now().Format(TimeFormatLayout)
-	if "" == group.ActiveSnapshot{
+	if "" == group.ActiveSnapshot {
 		//no snapshot available, new root
 		snapshot.IsRoot = true
 		group.ActiveSnapshot = snapshotName
 		group.BaseSnapshot = snapshotName
 		log.Printf("<storage> new root snapshot '%s.%s' created", groupName, snapshotName)
-	}else{
+	} else {
 		//backing on current snapshot
 		var previousName = group.ActiveSnapshot
 		{
 			previousSnapshot, exists := group.Snapshots[previousName]
-			if !exists{
+			if !exists {
 				log.Printf("<storage> warning: invalid previous snapshot '%s.%s'", groupName, previousName)
-			}else{
+			} else {
 				previousSnapshot.IsCurrent = false
 				group.Snapshots[previousName] = previousSnapshot
 			}
@@ -1548,32 +1557,32 @@ func (manager *StorageManager) handleCreateSnapshotCompleted(groupName, snapshot
 	return manager.saveVolumesMeta(groupName)
 }
 
-func (manager *StorageManager) handleRestoreSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error){
+func (manager *StorageManager) handleRestoreSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		errChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		group.Locked = false
 		manager.groups[groupName] = group
 		log.Printf("<storage> volume group '%s' unlocked for restore snapshot complete", groupName)
 	}
 	snapshot, exists := group.Snapshots[snapshotName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s.%s'", groupName, snapshotName)
 		errChan <- err
 		return err
 	}
-	if taskError != nil{
+	if taskError != nil {
 		log.Printf("<storage> warning: restore snapshot '%s.%s' fail: %s", groupName, snapshotName, err.Error())
 		errChan <- taskError
 		return nil
-	}else{
+	} else {
 		var previousName = group.ActiveSnapshot
 		previous, exists := group.Snapshots[previousName]
-		if !exists{
+		if !exists {
 			err = fmt.Errorf("can not find previous snapshot '%s.%s'", groupName, previousName)
 			errChan <- nil
 			return err
@@ -1590,24 +1599,24 @@ func (manager *StorageManager) handleRestoreSnapshotCompleted(groupName, snapsho
 	}
 }
 
-func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error){
+func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshotName string, taskError error, errChan chan error) (err error) {
 	group, exists := manager.groups[groupName]
-	if !exists{
+	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
 		errChan <- err
 		return err
 	}
-	if group.Locked{
+	if group.Locked {
 		group.Locked = false
 		manager.groups[groupName] = group
 		log.Printf("<storage> volume group '%s' unlocked for delete snapshot complete", groupName)
 	}
-	if _, exists := group.Snapshots[snapshotName]; !exists{
+	if _, exists := group.Snapshots[snapshotName]; !exists {
 		err = fmt.Errorf("invalid snapshot '%s.%s'", groupName, snapshotName)
 		errChan <- err
 		return err
 	}
-	if taskError != nil{
+	if taskError != nil {
 		log.Printf("<storage> warning: delete snapshot '%s.%s' fail: %s", groupName, snapshotName, err.Error())
 	}
 	delete(group.Snapshots, snapshotName)
@@ -1617,25 +1626,25 @@ func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshot
 	return manager.saveVolumesMeta(groupName)
 }
 
-func (manager *StorageManager) handleQueryStoragePaths(respChan chan StorageResult) (err error){
+func (manager *StorageManager) handleQueryStoragePaths(respChan chan StorageResult) (err error) {
 	respChan <- StorageResult{
 		StorageMode: manager.storageMode,
 		SystemPaths: manager.localSystemDiskPaths,
-		DataPaths: manager.localDataDiskPaths,
+		DataPaths:   manager.localDataDiskPaths,
 	}
 	return nil
 }
 
-func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, respChan chan error)(err error){
+func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, respChan chan error) (err error) {
 	//check system only
 	defer func() {
 		respChan <- err
 	}()
-	if manager.storageMode != StoragePoolModeLocal{
+	if manager.storageMode != StoragePoolModeLocal {
 		err = errors.New("must running in local mode")
 		return
 	}
-	if 0 == len(manager.localSystemDiskPaths){
+	if 0 == len(manager.localSystemDiskPaths) {
 		err = errors.New("can not found current system disk path")
 		return
 	}
@@ -1645,31 +1654,31 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 		return
 	}
 	var targets []string
-	for poolName, pool := range manager.pools{
-		if StoragePoolModeLocal != pool.Mode{
+	for poolName, pool := range manager.pools {
+		if StoragePoolModeLocal != pool.Mode {
 			//ignore none local pool
 			continue
 		}
 		var currentVolumeCount = len(pool.Volumes)
-		if 0 != currentVolumeCount{
+		if 0 != currentVolumeCount {
 			err = fmt.Errorf("%d volumes attached to previous pool", currentVolumeCount)
 			return
 		}
 		var empty, exists bool
-		if empty, err = isPathEmpty(pool.Target); err != nil{
+		if empty, err = isPathEmpty(pool.Target); err != nil {
 			err = fmt.Errorf("check pool path fail: %s", err.Error())
 			return
 		}
-		if !empty{
+		if !empty {
 			err = fmt.Errorf("previous pool path '%s' not empty", pool.Target)
 			return
 		}
 		var scheduler *IOScheduler
-		if scheduler, exists = manager.schedulers[poolName]; !exists{
+		if scheduler, exists = manager.schedulers[poolName]; !exists {
 			err = fmt.Errorf("can not found scheduler for pool '%s'", poolName)
 			return
-		}else {
-			if err = scheduler.Stop(); err != nil{
+		} else {
+			if err = scheduler.Stop(); err != nil {
 				err = fmt.Errorf("stop previous scheduler of pool '%s' fail: %s", poolName, err.Error())
 				return
 			}
@@ -1677,14 +1686,14 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 		}
 		targets = append(targets, poolName)
 	}
-	for _, poolName := range targets{
-		if err = manager.utility.DeleteLocalPool(poolName); err != nil{
+	for _, poolName := range targets {
+		if err = manager.utility.DeleteLocalPool(poolName); err != nil {
 			err = fmt.Errorf("remove previous pool '%s' fail: %s", poolName, err.Error())
 			return
 		}
 		var poolPath = filepath.Join(newPath, poolName)
 		var storagePool StoragePool
-		if storagePool, err = manager.utility.CreateLocalPool(poolName, poolPath); err != nil{
+		if storagePool, err = manager.utility.CreateLocalPool(poolName, poolPath); err != nil {
 			err = fmt.Errorf("create new pool '%s' fail: %s", poolName, err.Error())
 			return
 		}
@@ -1693,7 +1702,7 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 			err = fmt.Errorf("create new sceduler fail: %s", err.Error())
 			return
 		}
-		if err = scheduler.Start(); err != nil{
+		if err = scheduler.Start(); err != nil {
 			err = fmt.Errorf("start new sceduler fail: %s", err.Error())
 			return
 		}
@@ -1709,13 +1718,13 @@ func (manager *StorageManager) handleChangeDefaultStoragePath(newPath string, re
 	return
 }
 
-func isPathEmpty(root string) (empty bool, err error){
+func isPathEmpty(root string) (empty bool, err error) {
 	empty = true
 	err = filepath.Walk(root, func(current string, info os.FileInfo, pErr error) error {
-		if pErr != nil{
+		if pErr != nil {
 			return pErr
 		}
-		if current == root{
+		if current == root {
 			return nil
 		}
 		empty = false
@@ -1726,10 +1735,10 @@ func isPathEmpty(root string) (empty bool, err error){
 
 func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath string, err error) {
 	const (
-		NetMode         = "net"
-		MetaData        = "meta-data"
-		UserData        = "user-data"
-		Label           = "cidata"
+		NetMode  = "net"
+		MetaData = "meta-data"
+		UserData = "user-data"
+		Label    = "cidata"
 	)
 	var tmpPath = filepath.Join(poolPath, guestID)
 	if _, err = os.Stat(tmpPath); os.IsNotExist(err) {
