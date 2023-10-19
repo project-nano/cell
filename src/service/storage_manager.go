@@ -1023,22 +1023,24 @@ func (manager *StorageManager) handleGetSnapshot(groupName, snapshotName string,
 }
 
 func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, description string, respChan chan error) (err error) {
+	defer func() {
+		if nil != respChan && nil != err {
+			respChan <- err
+		}
+	}()
 	group, exists := manager.groups[groupName]
 	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
-		respChan <- err
-		return err
+		return
 	}
 	if group.Locked {
-		err := fmt.Errorf("volume group '%s' locked for update", groupName)
-		respChan <- err
-		return err
+		err = fmt.Errorf("volume group '%s' locked for update", groupName)
+		return
 	}
 	_, exists = group.Snapshots[snapshotName]
 	if exists {
 		err = fmt.Errorf("snapshot '%s.%s' exists", groupName, snapshotName)
-		respChan <- err
-		return err
+		return
 	}
 	var snapshot = ManagedSnapshot{}
 	snapshot.Running = false
@@ -1048,16 +1050,22 @@ func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, des
 	//system volume
 	var basePath = filepath.Dir(group.System.Path)
 
-	var targets = map[string]string{}
+	var targets = make([]snapshotTarget, 0)
 
 	var backingSystemPath = filepath.Join(basePath, fmt.Sprintf("%s_%s_sys.%s", groupName, snapshotName, FormatQcow2Suffix))
 	snapshot.Files[group.System.Name] = backingSystemPath
-	targets[group.System.Path] = backingSystemPath
+	targets = append(targets, snapshotTarget{
+		Current: group.System.Path,
+		Backing: backingSystemPath,
+	})
 
 	for index, volume := range group.Data {
 		var backingPath = filepath.Join(basePath, fmt.Sprintf("%s_%s_%d.%s", groupName, snapshotName, index, FormatQcow2Suffix))
 		snapshot.Files[volume.Name] = backingPath
-		targets[volume.Path] = backingPath
+		targets = append(targets, snapshotTarget{
+			Current: volume.Path,
+			Backing: backingPath,
+		})
 	}
 
 	if nil == group.Snapshots {
@@ -1065,11 +1073,11 @@ func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, des
 	} else {
 		group.Snapshots[snapshotName] = snapshot
 	}
-	scheduler, exists := manager.schedulers[group.System.Pool]
+	var scheduler *IOScheduler
+	scheduler, exists = manager.schedulers[group.System.Pool]
 	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
-		respChan <- err
-		return err
+		return
 	}
 	group.Locked = true
 	manager.groups[groupName] = group
@@ -1079,32 +1087,33 @@ func (manager *StorageManager) handleCreateSnapshot(groupName, snapshotName, des
 }
 
 func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName string, respChan chan error) (err error) {
+	defer func() {
+		if nil != respChan && nil != err {
+			respChan <- err
+		}
+	}()
 	group, exists := manager.groups[groupName]
 	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
-		respChan <- err
-		return err
+		return
 	}
 	if group.Locked {
-		err := fmt.Errorf("volume group '%s' locked for update", groupName)
-		respChan <- err
-		return err
+		err = fmt.Errorf("volume group '%s' locked for update", groupName)
+		return
 	}
 	if snapshotName == group.ActiveSnapshot {
 		err = errors.New("Not support delete active snapshot")
-		respChan <- err
-		return err
+		return
 	}
 	if snapshotName == group.BaseSnapshot {
 		err = errors.New("Not support delete root snapshot")
-		respChan <- err
-		return err
+		return
 	}
-	snapshot, exists := group.Snapshots[snapshotName]
+	var snapshot ManagedSnapshot
+	snapshot, exists = group.Snapshots[snapshotName]
 	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
-		respChan <- err
-		return err
+		return
 	}
 	for name, s := range group.Snapshots {
 		if name == snapshotName {
@@ -1112,67 +1121,81 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 		}
 		if snapshotName == s.Backing {
 			err = fmt.Errorf("snapshot '%s' is depend on '%s', can not delete", name, snapshotName)
-			respChan <- err
-			return err
+			return
 		}
 	}
-	scheduler, exists := manager.schedulers[group.System.Pool]
+	var scheduler *IOScheduler
+	scheduler, exists = manager.schedulers[group.System.Pool]
 	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
-		respChan <- err
-		return err
+		return
 	}
 	group.Locked = true
 	manager.groups[groupName] = group
 	log.Printf("<storage> volume group '%s' locked for delete snapshot", groupName)
-	scheduler.AddDeleteSnapshotTask(groupName, snapshotName, snapshot.Files, respChan)
+	var targets = make([]snapshotTarget, 0)
+	// iterate snapshot.files to create targets
+	for imagePath, backingPath := range snapshot.Files {
+		targets = append(targets, snapshotTarget{
+			Current: imagePath,
+			Backing: backingPath,
+		})
+	}
+	scheduler.AddDeleteSnapshotTask(groupName, snapshotName, targets, respChan)
 	return nil
 }
 
 func (manager *StorageManager) handleRestoreSnapshot(groupName, snapshotName string, respChan chan error) (err error) {
+	defer func() {
+		if nil != respChan && nil != err {
+			respChan <- err
+		}
+	}()
 	group, exists := manager.groups[groupName]
 	if !exists {
 		err = fmt.Errorf("invalid volume group '%s'", groupName)
-		respChan <- err
-		return err
+		return
 	}
 	if group.Locked {
-		err := fmt.Errorf("volume group '%s' locked for update", groupName)
-		respChan <- err
-		return err
+		err = fmt.Errorf("volume group '%s' locked for update", groupName)
+		return
 	}
-	snapshot, exists := group.Snapshots[snapshotName]
+	var snapshot ManagedSnapshot
+	snapshot, exists = group.Snapshots[snapshotName]
 	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
-		respChan <- err
-		return err
+		return
 	}
 	//system volume
-	var targets = map[string]string{}
-	systemBacking, exists := snapshot.Files[group.System.Name]
+	var targets = make([]snapshotTarget, 0)
+	var systemBacking, backingPath string
+	systemBacking, exists = snapshot.Files[group.System.Name]
 	if !exists {
 		err = fmt.Errorf("no backing file for volume '%s' in snapshot '%s'", group.System.Name, snapshotName)
-		respChan <- err
-		return err
+		return
 	}
-	targets[group.System.Path] = systemBacking
+	targets = append(targets, snapshotTarget{
+		Current: group.System.Path,
+		Backing: systemBacking,
+	})
 	//data volume
 	for _, volume := range group.Data {
 		//todo: new data volume
-		backingPath, exists := snapshot.Files[volume.Name]
+		backingPath, exists = snapshot.Files[volume.Name]
 		if !exists {
 			err = fmt.Errorf("no backing file for data volume '%s' in snapshot '%s'", volume.Name, snapshotName)
-			respChan <- err
-			return err
+			return
 		}
-		targets[volume.Path] = backingPath
+		targets = append(targets, snapshotTarget{
+			Current: volume.Path,
+			Backing: backingPath,
+		})
 	}
-
-	scheduler, exists := manager.schedulers[group.System.Pool]
+	var scheduler *IOScheduler
+	scheduler, exists = manager.schedulers[group.System.Pool]
 	if !exists {
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
-		respChan <- err
-		return err
+		return
 	}
 	group.Locked = true
 	manager.groups[groupName] = group

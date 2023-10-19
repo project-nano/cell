@@ -2,9 +2,14 @@
 
 ## [1.4.0] - 2023-10-13
 
+### Added
+
+- Add testcases for storage manager
+
 ### Changed
 
 - Refuse to create disk image when snapshots available
+
 
 ## [1.3.1] - 2021-02-19
 

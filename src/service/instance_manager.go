@@ -1834,7 +1834,7 @@ func (manager *InstanceManager) handleGetSecurityPolicy(instanceID string, respC
 	if nil == instance.Security {
 		var policy = SecurityPolicy{Accept: true}
 		if err = manager.util.InitialDomainNwfilter(instanceID, policy); err != nil {
-			err = fmt.Errorf("initial nwfilter for guest '%s' fail: %s", err.Error())
+			err = fmt.Errorf("initial nwfilter for guest '%s' fail: %s", instanceID, err.Error())
 			respChan <- InstanceResult{Error: err}
 			return
 		}

@@ -1,21 +1,21 @@
 package service
 
 import (
-	"github.com/project-nano/framework"
-	"log"
-	"fmt"
-	"math"
-	"os"
-	"io"
-	"mime/multipart"
-	"time"
-	"net/http"
+	"crypto/sha1"
+	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"crypto/tls"
-	"crypto/sha1"
-	"encoding/hex"
+	"fmt"
+	"github.com/project-nano/framework"
+	"io"
+	"log"
+	"math"
+	"mime/multipart"
+	"net/http"
+	"os"
 	"os/exec"
+	"time"
 )
 
 type SchedulerResult struct {
@@ -41,7 +41,7 @@ type scheduleTask struct {
 	Group      string
 	Volume     string
 	Snapshot   string
-	Targets    map[string]string
+	Targets    []snapshotTarget
 	ErrorChan  chan error
 }
 
@@ -78,6 +78,12 @@ type schedulerEvent struct {
 	ErrorChan chan error
 }
 
+type snapshotTarget struct {
+	Current string `json:"current"`
+	Backing string `json:"backing,omitempty"`
+	Backed  bool   `json:"backed,omitempty"`
+}
+
 type IOScheduler struct {
 	name         string
 	progressChan chan SchedulerUpdate
@@ -105,11 +111,11 @@ func CreateScheduler(poolName string, progressChan chan SchedulerUpdate, resultC
 	return scheduler, nil
 }
 
-func (scheduler *IOScheduler) Start() error{
+func (scheduler *IOScheduler) Start() error {
 	return scheduler.runner.Start()
 }
 
-func (scheduler *IOScheduler) Stop() error{
+func (scheduler *IOScheduler) Stop() error {
 	return scheduler.runner.Stop()
 }
 
@@ -128,33 +134,33 @@ func (scheduler *IOScheduler) Routine(c framework.RoutineController) {
 }
 
 func (scheduler *IOScheduler) AddWriteTask(id framework.SessionID, group, volume, path, image, host string, port uint) {
-	task := scheduleTask{Type: scheduleWriteDiskImage, ID: id, Group:group, Volume:volume, Path: path, Image: image, Host: host, Port: port}
+	task := scheduleTask{Type: scheduleWriteDiskImage, ID: id, Group: group, Volume: volume, Path: path, Image: image, Host: host, Port: port}
 	scheduler.taskChan <- task
 }
 
 func (scheduler *IOScheduler) AddReadTask(id framework.SessionID, group, volume, path, image string, targetSize, imgSize uint64, host string, port uint) {
-	task := scheduleTask{Type: scheduleReadDiskImage, ID: id, Group:group, Volume:volume, Path: path, Image: image, ImageSize: imgSize, TargetSize:targetSize, Host: host, Port: port}
+	task := scheduleTask{Type: scheduleReadDiskImage, ID: id, Group: group, Volume: volume, Path: path, Image: image, ImageSize: imgSize, TargetSize: targetSize, Host: host, Port: port}
 	scheduler.taskChan <- task
 }
 
-func (scheduler *IOScheduler) AddResizeTask(id framework.SessionID, group, volume, path string, size uint64){
-	scheduler.taskChan <- scheduleTask{Type: scheduleResizeDisk, ID: id, Group:group, Volume:volume, Path:path, TargetSize:size}
+func (scheduler *IOScheduler) AddResizeTask(id framework.SessionID, group, volume, path string, size uint64) {
+	scheduler.taskChan <- scheduleTask{Type: scheduleResizeDisk, ID: id, Group: group, Volume: volume, Path: path, TargetSize: size}
 }
 
-func (scheduler *IOScheduler) AddShrinkTask(id framework.SessionID, group, volume, path string){
-	scheduler.taskChan <- scheduleTask{Type: scheduleShrinkDisk, ID: id, Group:group, Volume:volume, Path:path}
+func (scheduler *IOScheduler) AddShrinkTask(id framework.SessionID, group, volume, path string) {
+	scheduler.taskChan <- scheduleTask{Type: scheduleShrinkDisk, ID: id, Group: group, Volume: volume, Path: path}
 }
 
-func (scheduler *IOScheduler) AddCreateSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error){
-	scheduler.taskChan <- scheduleTask{Type: scheduleCreateSnapshot, Group:group, Snapshot:snapshot, Targets:targets, ErrorChan:respChan}
+func (scheduler *IOScheduler) AddCreateSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) {
+	scheduler.taskChan <- scheduleTask{Type: scheduleCreateSnapshot, Group: group, Snapshot: snapshot, Targets: targets, ErrorChan: respChan}
 }
 
-func (scheduler *IOScheduler) AddRestoreSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error){
-	scheduler.taskChan <- scheduleTask{Type: scheduleRestoreSnapshot, Group:group, Snapshot:snapshot, Targets:targets, ErrorChan:respChan}
+func (scheduler *IOScheduler) AddRestoreSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) {
+	scheduler.taskChan <- scheduleTask{Type: scheduleRestoreSnapshot, Group: group, Snapshot: snapshot, Targets: targets, ErrorChan: respChan}
 }
 
-func (scheduler *IOScheduler) AddDeleteSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error){
-	scheduler.taskChan <- scheduleTask{Type: scheduleDeleteSnapshot, Group:group, Snapshot:snapshot, Targets:targets, ErrorChan:respChan}
+func (scheduler *IOScheduler) AddDeleteSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) {
+	scheduler.taskChan <- scheduleTask{Type: scheduleDeleteSnapshot, Group: group, Snapshot: snapshot, Targets: targets, ErrorChan: respChan}
 }
 
 func (scheduler *IOScheduler) handleTask(task scheduleTask) {
@@ -193,7 +199,7 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 		NotifyInterval = 1 * time.Second
 	)
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventWriteDiskCompleted, Group:group, Volume:volume}
+		var event = schedulerEvent{Type: schedulerEventWriteDiskCompleted, Group: group, Volume: volume}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
@@ -206,7 +212,7 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 	}
 	var totalSize = int(stat.Size())
 	checkSum, err := scheduler.generateCheckSum(path)
-	if err != nil{
+	if err != nil {
 		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 		return err
 	}
@@ -223,7 +229,6 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 
 	var multiWriter = multipart.NewWriter(bodyWriter)
 	var contentType = multiWriter.FormDataContentType()
-
 
 	go func() {
 		defer func() {
@@ -327,7 +332,7 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 		VolumePerm     = 0666
 	)
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventReadDiskCompleted, Group:group, Volume:volume}
+		var event = schedulerEvent{Type: schedulerEventReadDiskCompleted, Group: group, Volume: volume}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
@@ -386,16 +391,16 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 			if err == io.EOF {
 				//finish
 				{
-					if "" != checkSum{
+					if "" != checkSum {
 						log.Printf("<scheduler-%s> all image data received, checking integrity...", scheduler.name)
 						computed, err := scheduler.generateCheckSum(path)
-						if err != nil{
+						if err != nil {
 							log.Printf("<scheduler-%s> generate check sum fail: %s", scheduler.name, err.Error())
 							os.Remove(path)
 							scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 							break
 						}
-						if checkSum != computed{
+						if checkSum != computed {
 							err = errors.New("image corrupted")
 							log.Printf("<scheduler-%s> check integrity fail: %s", scheduler.name, err.Error())
 							scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
@@ -404,7 +409,7 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 					}
 					//resize image
 					cmd := exec.Command("qemu-img", "resize", path, fmt.Sprintf("%d", targetSize))
-					if err = cmd.Run();err !=nil{
+					if err = cmd.Run(); err != nil {
 						log.Printf("<scheduler-%s> resize image fail: %s", scheduler.name, err.Error())
 						os.Remove(path)
 						err = fmt.Errorf("resize image to %s fail: %s", bytesToString(targetSize), err.Error())
@@ -429,9 +434,9 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 	return nil
 }
 
-func (scheduler *IOScheduler) handleResizeTask(id framework.SessionID, group, volume, path string, size uint64) (err error){
+func (scheduler *IOScheduler) handleResizeTask(id framework.SessionID, group, volume, path string, size uint64) (err error) {
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventResizeDiskCompleted, Group:group, Volume:volume}
+		var event = schedulerEvent{Type: schedulerEventResizeDiskCompleted, Group: group, Volume: volume}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
@@ -439,23 +444,23 @@ func (scheduler *IOScheduler) handleResizeTask(id framework.SessionID, group, vo
 	var cmd = exec.Command("qemu-img", "resize", path, fmt.Sprintf("%d", size))
 	log.Printf("<scheduler-%s> try resize volume %s ...", scheduler.name, path)
 	errMessage, err := cmd.CombinedOutput()
-	if err != nil{
+	if err != nil {
 		err = errors.New(string(errMessage))
 		log.Printf("<scheduler-%s> resize volume fail: %s", scheduler.name, err.Error())
 		err = fmt.Errorf("resize volume to %s fail: %s", bytesToString(size), err.Error())
-		scheduler.resultChan <- SchedulerResult{Error:err, ID:id}
+		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 		return err
 	}
 	var elapsed = time.Now().Sub(begin).Seconds() * 1000
-	scheduler.resultChan <- SchedulerResult{ID:id}
+	scheduler.resultChan <- SchedulerResult{ID: id}
 	log.Printf("<scheduler-%s> resize volume '%s' to %s in %.3f milliseconds",
 		scheduler.name, path, bytesToString(size), elapsed)
 	return nil
 }
 
-func (scheduler *IOScheduler) handleShrinkTask(id framework.SessionID, group, volume, path string) (err error){
+func (scheduler *IOScheduler) handleShrinkTask(id framework.SessionID, group, volume, path string) (err error) {
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventShrinkDiskCompleted, Group:group, Volume:volume}
+		var event = schedulerEvent{Type: schedulerEventShrinkDiskCompleted, Group: group, Volume: volume}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
@@ -464,42 +469,43 @@ func (scheduler *IOScheduler) handleShrinkTask(id framework.SessionID, group, vo
 	var cmd = exec.Command("qemu-img", "convert", "-f", "qcow2", "-O", "qcow2", path, shrankPath)
 	log.Printf("<scheduler-%s> try shrink volume %s ...", scheduler.name, path)
 	errMessage, err := cmd.CombinedOutput()
-	if err != nil{
+	if err != nil {
 		err = errors.New(string(errMessage))
 		log.Printf("<scheduler-%s> shrink volume fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error:err, ID:id}
+		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 		return err
 	}
 	log.Printf("<scheduler-%s> shrank volume %s created", scheduler.name, shrankPath)
-	if err = os.Remove(path); err != nil{
+	if err = os.Remove(path); err != nil {
 		log.Printf("<scheduler-%s> remove old image fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error:err, ID:id}
+		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 		return err
 	}
-	if err = os.Rename(shrankPath, path); err != nil{
+	if err = os.Rename(shrankPath, path); err != nil {
 		log.Printf("<scheduler-%s> rename new image fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error:err, ID:id}
+		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 		return err
 	}
 	var elapsed = time.Now().Sub(begin).Seconds() * 1000
-	scheduler.resultChan <- SchedulerResult{ID:id}
+	scheduler.resultChan <- SchedulerResult{ID: id}
 	log.Printf("<scheduler-%s> volume '%s' shrank in %.3f milliseconds",
 		scheduler.name, path, elapsed)
 	return nil
 }
 
-func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error) (err error){
+func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventCreateSnapshotCompleted, Group:group, Snapshot:snapshot, ErrorChan:respChan}
+		var event = schedulerEvent{Type: schedulerEventCreateSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
-	for current, backing := range targets{
-		if err = os.Rename(current, backing); err != nil{
+	for _, target := range targets {
+		current, backing := target.Current, target.Backing
+		if err = os.Rename(current, backing); err != nil {
 			return err
 		}
 		var cmd = exec.Command("qemu-img", "create", "-f", "qcow2", "-b", backing, current)
-		if err = cmd.Run(); err != nil{
+		if err = cmd.Run(); err != nil {
 			return err
 		}
 		log.Printf("<scheduler-%s> '%s' created on '%s'",
@@ -510,22 +516,23 @@ func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, t
 	return nil
 }
 
-func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error) (err error){
+func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventRestoreSnapshotCompleted, Group:group, Snapshot:snapshot, ErrorChan:respChan}
+		var event = schedulerEvent{Type: schedulerEventRestoreSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
-	for current, backing := range targets{
-		if _, err = os.Stat(backing); os.IsNotExist(err){
+	for _, target := range targets {
+		current, backing := target.Current, target.Backing
+		if _, err = os.Stat(backing); os.IsNotExist(err) {
 			err = fmt.Errorf("invalid backing path '%s'", backing)
 			return err
 		}
-		if err = os.Remove(current); err != nil{
+		if err = os.Remove(current); err != nil {
 			return err
 		}
 		var cmd = exec.Command("qemu-img", "create", "-f", "qcow2", "-b", backing, current)
-		if err = cmd.Run(); err != nil{
+		if err = cmd.Run(); err != nil {
 			return err
 		}
 		log.Printf("<scheduler-%s> '%s' reverted to '%s'",
@@ -536,17 +543,18 @@ func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, 
 	return nil
 }
 
-func (scheduler *IOScheduler) handleDeleteSnapshotTask(group, snapshot string, targets map[string]string, respChan chan error) (err error){
+func (scheduler *IOScheduler) handleDeleteSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
 	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventDeleteSnapshotCompleted, Group:group, Snapshot:snapshot, ErrorChan:respChan}
+		var event = schedulerEvent{Type: schedulerEventDeleteSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
 		event.Error = e
 		scheduler.eventChan <- event
 	}(err)
-	for _, file := range targets{
-		if err = os.Remove(file); err != nil{
+	for _, target := range targets {
+		file := target.Backing
+		if err = os.Remove(file); err != nil {
 			log.Printf("<scheduler-%s> warning: delete snapshot file '%s' fail: %s",
 				scheduler.name, file, err.Error())
-		}else{
+		} else {
 			log.Printf("<scheduler-%s> snapshot file '%s' deleted",
 				scheduler.name, file)
 		}
@@ -556,20 +564,20 @@ func (scheduler *IOScheduler) handleDeleteSnapshotTask(group, snapshot string, t
 	return nil
 }
 
-func (scheduler *IOScheduler)generateCheckSum(target string) (sum string, err error){
+func (scheduler *IOScheduler) generateCheckSum(target string) (sum string, err error) {
 	file, err := os.Open(target)
-	if err != nil{
+	if err != nil {
 		return
 	}
-	var checkBuffer = make([]byte, 4 << 20)//4M buffer
+	var checkBuffer = make([]byte, 4<<20) //4M buffer
 	var hash = sha1.New()
 	var begin = time.Now()
 	bytes, err := io.CopyBuffer(hash, file, checkBuffer)
-	if err != nil{
+	if err != nil {
 		file.Close()
 		return
 	}
-	var elapsed = (time.Now().Sub(begin))/ time.Millisecond
+	var elapsed = (time.Now().Sub(begin)) / time.Millisecond
 	sum = hex.EncodeToString(hash.Sum(nil))
 	log.Printf("<scheduler-%s> compute hash '%s' in %d millisecond(s) for %d bytes",
 		scheduler.name, sum, elapsed, bytes)
@@ -577,7 +585,7 @@ func (scheduler *IOScheduler)generateCheckSum(target string) (sum string, err er
 	return
 }
 
-func (scheduler *IOScheduler) apiPath(path string) string{
+func (scheduler *IOScheduler) apiPath(path string) string {
 	return fmt.Sprintf("%s/v%d%s", APIRoot, APIVersion, path)
 }
 
@@ -590,25 +598,25 @@ func bytesToString(sizeInBytes uint64) string {
 	)
 	var value = float64(sizeInBytes)
 	var unit string
-	if value < KB{
+	if value < KB {
 		return fmt.Sprintf("%d Bytes", sizeInBytes)
-	}else if value < MB{
+	} else if value < MB {
 		unit = "KB"
 		value = value / KB
-	}else if value < GB{
+	} else if value < GB {
 		unit = "MB"
 		value = value / MB
-	}else if value < TB {
+	} else if value < TB {
 		unit = "GB"
 		value = value / GB
-	}else{
+	} else {
 		unit = "TB"
 		value = value / TB
 	}
-	if value == math.Round(value){
+	if value == math.Round(value) {
 		//integer
 		return fmt.Sprintf("%d %s", int(value), unit)
-	}else{
+	} else {
 		return fmt.Sprintf("%.02f %s", value, unit)
 	}
 }

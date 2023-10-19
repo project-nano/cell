@@ -15,4 +15,5 @@ config
 log
 pkg
 cell
+test
 .idea
