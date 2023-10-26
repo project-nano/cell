@@ -9,7 +9,11 @@
 ### Changed
 
 - Refuse to create disk image when snapshots available
+- Allow to delete root and active snapshot
 
+### Fixed
+
+- crash when delete snapshot failed
 
 ## [1.3.1] - 2021-02-19
 

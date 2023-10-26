@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"github.com/libvirt/libvirt-go"
 	"os"
 	"testing"
@@ -120,7 +121,7 @@ func TestStorageManager_Snapshots(t *testing.T) {
 		s211 = "omega"
 		s3   = "omicron"
 	)
-	var dumpSnapshots = func() {
+	var verifySnapshotTree = func(checkpoint string, required [][]expectSnapshot) {
 		// query and print snapshot tree
 		queryChan := make(chan StorageResult, 1)
 		manager.QuerySnapshot(volumeName, queryChan)
@@ -128,9 +129,22 @@ func TestStorageManager_Snapshots(t *testing.T) {
 		if resp.Error != nil {
 			t.Fatalf("query snapshot failed: %s", resp.Error.Error())
 		}
-		for _, node := range resp.SnapshotList {
-			// dump snapshot name, backing, current and root flag
-			t.Logf("snapshot %s, backing %s, current %v, root %v", node.Name, node.Backing, node.IsCurrent, node.IsRoot)
+		dumpSnapshots(resp.SnapshotList, t.Logf)
+		if err = checkSnapshotTree(resp.SnapshotList, required); err != nil {
+			t.Fatalf("checkpoint %s failed: %s", checkpoint, err.Error())
+		}
+		t.Logf("checkpoint %s passed", checkpoint)
+	}
+	batchDelete := func(targets []string) {
+		respChan := make(chan error, 1)
+		for _, snapshotName := range targets {
+			manager.DeleteSnapshot(volumeName, snapshotName, respChan)
+			err = <-respChan
+			if nil != err {
+				t.Fatalf("delete snapshot %s failed: %s", snapshotName, err.Error())
+			} else {
+				t.Logf("delete snapshot %s success", snapshotName)
+			}
 		}
 	}
 	{
@@ -189,7 +203,38 @@ func TestStorageManager_Snapshots(t *testing.T) {
 			}
 			t.Logf("snapshot %s created", name)
 		}
-		dumpSnapshots()
+	}
+	// checkpoint 1
+	{
+		// s111 -> s11 -> s1 -> s0(root)
+		// s112 -> s11 -> s1 -> s0(root)
+		// s211 -> s21 -> s2 -> s0(root)
+		// s3(current) -> s0(root)
+		var checkpoint1 = [][]expectSnapshot{
+			{
+				{name: s111, isCurrent: false, isRoot: false},
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s112, isCurrent: false, isRoot: false},
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s211, isCurrent: false, isRoot: false},
+				{name: s21, isCurrent: false, isRoot: false},
+				{name: s2, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s3, isCurrent: true, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+		}
+		verifySnapshotTree("checkpoint 1", checkpoint1)
 	}
 	{
 		// delete s0 and must fail
@@ -201,41 +246,188 @@ func TestStorageManager_Snapshots(t *testing.T) {
 		t.Logf("delete snapshot %s failed as expected: %s", s0, err.Error())
 	}
 	{
-		// delete s2 and must fail
-		respChan := make(chan error, 1)
-		manager.DeleteSnapshot(volumeName, s2, respChan)
-		if err = <-respChan; err == nil {
-			t.Fatalf("delete snapshot %s should fail", s2)
+		batches := []string{
+			s112,
+			s2,
+			s3,
 		}
-		t.Logf("delete snapshot %s failed as expected: %s", s2, err.Error())
+		batchDelete(batches)
 	}
 	{
-		// delete s211 and must success
+		// s111 -> s11 -> s1 -> s0(root, current)
+		// s11 -> s1 -> s0(root, current)
+		// s211 -> s21 -> s0(root, current)
+		var checkpoint2 = [][]expectSnapshot{
+			{
+				{name: s111, isCurrent: false, isRoot: false},
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: true, isRoot: true},
+			},
+			{
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: true, isRoot: true},
+			},
+			{
+				{name: s211, isCurrent: false, isRoot: false},
+				{name: s21, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: true, isRoot: true},
+			},
+		}
+		verifySnapshotTree("checkpoint 2", checkpoint2)
+	}
+	{
+		// create s3 to current
+		var targetName = s3
 		respChan := make(chan error, 1)
-		manager.DeleteSnapshot(volumeName, s211, respChan)
+		manager.CreateSnapshot(volumeName, targetName, targetName, respChan)
 		if err = <-respChan; err != nil {
-			t.Fatalf("delete snapshot %s failed: %s", s211, err.Error())
+			t.Fatalf("create snapshot %s failed: %s", targetName, err.Error())
 		}
-		t.Logf("delete snapshot %s success", s211)
-	}
-	{
-		// delete s21 and must success
-		respChan := make(chan error, 1)
-		manager.DeleteSnapshot(volumeName, s21, respChan)
+		t.Logf("snapshot %s created", targetName)
+		// revert to s11
+		targetName = s11
+		manager.RestoreSnapshot(volumeName, targetName, respChan)
 		if err = <-respChan; err != nil {
-			t.Fatalf("delete snapshot %s failed: %s", s21, err.Error())
+			t.Fatalf("restore snapshot %s failed: %s", targetName, err.Error())
 		}
-		t.Logf("delete snapshot %s success", s21)
+		t.Logf("snapshot %s restored", targetName)
+		// create s112 to current
+		targetName = s112
+		manager.CreateSnapshot(volumeName, targetName, targetName, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("create snapshot %s failed: %s", targetName, err.Error())
+		}
+		t.Logf("snapshot %s created", targetName)
 	}
 	{
-		// delete s3 and must fail
-		respChan := make(chan error, 1)
-		manager.DeleteSnapshot(volumeName, s3, respChan)
-		if err = <-respChan; err == nil {
-			t.Fatalf("delete snapshot %s should fail", s3)
+		//checkpoint 3
+		// s111 -> s11 -> s1 -> s0(root)
+		// s112(current) -> s11 -> s1 -> s0(root)
+		// s211 -> s21 -> s0(root)
+		// s3-> s0(root)
+		var checkpoint3 = [][]expectSnapshot{
+			{
+				{name: s111, isCurrent: false, isRoot: false},
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s112, isCurrent: true, isRoot: false},
+				{name: s11, isCurrent: false, isRoot: false},
+				{name: s1, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s211, isCurrent: false, isRoot: false},
+				{name: s21, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
+			{
+				{name: s3, isCurrent: false, isRoot: false},
+				{name: s0, isCurrent: false, isRoot: true},
+			},
 		}
-		t.Logf("delete snapshot %s failed as expected: %s", s3, err.Error())
+		verifySnapshotTree("checkpoint 3", checkpoint3)
 	}
-	dumpSnapshots()
+	{
+		batches := []string{
+			s111,
+			s112,
+			s11,
+			s1,
+			s21,
+			s211,
+			s3,
+			s0,
+		}
+		batchDelete(batches)
+	}
+	{
+		// create snapshot s3, s2
+		var targetName = s3
+		respChan := make(chan error, 1)
+		manager.CreateSnapshot(volumeName, targetName, targetName, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("create snapshot %s failed: %s", targetName, err.Error())
+		}
+		t.Logf("snapshot %s created", targetName)
+		targetName = s2
+		manager.CreateSnapshot(volumeName, targetName, targetName, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("create snapshot %s failed: %s", targetName, err.Error())
+		}
+		t.Logf("snapshot %s created", targetName)
+	}
+	{
+		//checkpoint 4
+		// s2(current) -> s3(root)
+		var checkpoint4 = [][]expectSnapshot{
+			{
+				{name: s2, isCurrent: true, isRoot: false},
+				{name: s3, isCurrent: false, isRoot: true},
+			},
+		}
+		verifySnapshotTree("checkpoint 4", checkpoint4)
+
+	}
 	t.Log("test case: Snapshots passed")
+}
+
+type logPrint func(format string, v ...interface{})
+
+func dumpSnapshots(snapshots []SnapshotConfig, log logPrint) {
+	for _, node := range snapshots {
+		// dump snapshot name, backing, current and root flag
+		log("snapshot %s, backing %s, current %v, root %v", node.Name, node.Backing, node.IsCurrent, node.IsRoot)
+	}
+}
+
+type expectSnapshot struct {
+	name      string
+	isCurrent bool
+	isRoot    bool
+}
+
+func checkSnapshotTree(snapshots []SnapshotConfig, required [][]expectSnapshot) (err error) {
+	//build snapshot map
+	var snapshotMap = map[string]SnapshotConfig{}
+	for _, snapshot := range snapshots {
+		snapshotMap[snapshot.Name] = snapshot
+	}
+	for seqIndex, sequence := range required {
+		seqLength := len(sequence)
+		for index := 0; index < seqLength; index++ {
+			depth := seqLength - index - 1
+			expected := sequence[index]
+			snapshot, exists := snapshotMap[expected.name]
+			if !exists {
+				err = fmt.Errorf("cannot find snapshot %s for sequence %d, depth %d",
+					expected.name, seqIndex, depth)
+				return
+			}
+			if snapshot.IsCurrent != expected.isCurrent {
+				err = fmt.Errorf("snapshot %s current flag mismatch for sequence %d, depth %d. expected %v, actual %v",
+					expected.name, seqIndex, depth, expected.isCurrent, snapshot.IsCurrent)
+				return
+			}
+			if snapshot.IsRoot != expected.isRoot {
+				err = fmt.Errorf("snapshot %s root flag mismatch for sequence %d, depth %d. expected %v, actual %v",
+					expected.name, seqIndex, depth, expected.isRoot, snapshot.IsRoot)
+				return
+			}
+			// check backing
+			if depth > 0 {
+				backing := sequence[index+1]
+				if snapshot.Backing != backing.name {
+					err = fmt.Errorf("snapshot %s backing mismatch for sequence %d, depth %d. expected %s, actual %s",
+						expected.name, seqIndex, depth, backing.name, snapshot.Backing)
+					return
+				}
+			}
+		}
+	}
+	return nil
 }

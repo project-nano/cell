@@ -1101,28 +1101,40 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 		err = fmt.Errorf("volume group '%s' locked for update", groupName)
 		return
 	}
-	if snapshotName == group.ActiveSnapshot {
-		err = errors.New("Not support delete active snapshot")
-		return
-	}
-	if snapshotName == group.BaseSnapshot {
-		err = errors.New("Not support delete root snapshot")
-		return
-	}
+	//if snapshotName == group.ActiveSnapshot {
+	//	err = errors.New("Not support delete active snapshot")
+	//	return
+	//}
+	//if snapshotName == group.BaseSnapshot {
+	//	err = errors.New("Not support delete root snapshot")
+	//	return
+	//}
 	var snapshot ManagedSnapshot
 	snapshot, exists = group.Snapshots[snapshotName]
 	if !exists {
 		err = fmt.Errorf("invalid snapshot '%s'", snapshotName)
 		return
 	}
+	var backedAvailable = snapshot.IsCurrent //backed by current images
+	var currentBackedSnapshot string
+	var backedCount = 0
 	for name, s := range group.Snapshots {
 		if name == snapshotName {
 			continue
 		}
 		if snapshotName == s.Backing {
-			err = fmt.Errorf("snapshot '%s' is depend on '%s', can not delete", name, snapshotName)
-			return
+			if 0 == backedCount {
+				//first
+				currentBackedSnapshot = name
+				backedCount++
+			} else {
+				err = fmt.Errorf("more than one snapshot depend on '%s', can not delete", snapshotName)
+				return
+			}
 		}
+	}
+	if !backedAvailable && 0 != backedCount {
+		backedAvailable = true
 	}
 	var scheduler *IOScheduler
 	scheduler, exists = manager.schedulers[group.System.Pool]
@@ -1130,17 +1142,67 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 		err = fmt.Errorf("no scheduler for pool '%s'", group.System.Pool)
 		return
 	}
+
+	var targets = make([]snapshotTarget, 0)
+	var backedImages = map[string]string{}
+	if backedAvailable {
+		if "" == currentBackedSnapshot {
+			//backed by system images
+			backedImages[group.System.Name] = group.System.Path
+			for _, dataImage := range group.Data {
+				backedImages[dataImage.Name] = dataImage.Path
+			}
+		} else {
+			//backed by other snapshot
+			var backedSnapshot ManagedSnapshot
+			if backedSnapshot, exists = group.Snapshots[currentBackedSnapshot]; !exists {
+				err = fmt.Errorf("invalid backed snapshot '%s'", currentBackedSnapshot)
+				return
+			}
+			for name, path := range backedSnapshot.Files {
+				backedImages[name] = path
+			}
+		}
+	}
+	var backingSnapshot ManagedSnapshot
+	var backingAvailable = false
+	if "" != snapshot.Backing {
+		backingSnapshot, exists = group.Snapshots[snapshot.Backing]
+		if !exists {
+			err = fmt.Errorf("invalid backing snapshot '%s'", snapshot.Backing)
+			return
+		}
+		backingAvailable = true
+	}
+	// iterate snapshot.files to create targets
+	for volumeName, imagePath := range snapshot.Files {
+		var target = snapshotTarget{
+			Current: imagePath,
+		}
+		if backingAvailable {
+			//backing snapshot available
+			var backingImagePath string
+			if backingImagePath, exists = backingSnapshot.Files[volumeName]; !exists {
+				err = fmt.Errorf("no backing image found for '%s'", volumeName)
+				return
+			}
+			target.Backing = backingImagePath
+		}
+		if backedAvailable {
+			//backed snapshot available
+			var backedImagePath string
+			if backedImagePath, exists = backedImages[volumeName]; !exists {
+				err = fmt.Errorf("no backed image found for '%s'", volumeName)
+				return
+			}
+			target.Backed = backedImagePath
+		}
+		targets = append(targets, target)
+	}
 	group.Locked = true
 	manager.groups[groupName] = group
 	log.Printf("<storage> volume group '%s' locked for delete snapshot", groupName)
-	var targets = make([]snapshotTarget, 0)
-	// iterate snapshot.files to create targets
-	for imagePath, backingPath := range snapshot.Files {
-		targets = append(targets, snapshotTarget{
-			Current: imagePath,
-			Backing: backingPath,
-		})
-	}
+
 	scheduler.AddDeleteSnapshotTask(groupName, snapshotName, targets, respChan)
 	return nil
 }
@@ -1634,16 +1696,51 @@ func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshot
 		manager.groups[groupName] = group
 		log.Printf("<storage> volume group '%s' unlocked for delete snapshot complete", groupName)
 	}
-	if _, exists := group.Snapshots[snapshotName]; !exists {
+	var target ManagedSnapshot
+	if target, exists = group.Snapshots[snapshotName]; !exists {
 		err = fmt.Errorf("invalid snapshot '%s.%s'", groupName, snapshotName)
 		errChan <- err
 		return err
 	}
 	if taskError != nil {
-		log.Printf("<storage> warning: delete snapshot '%s.%s' fail: %s", groupName, snapshotName, err.Error())
+		log.Printf("<storage> warning: delete snapshot '%s.%s' fail: %s", groupName, snapshotName, taskError.Error())
+	}
+	var previousSnapshot ManagedSnapshot
+	var previousName = target.Backing
+	if snapshotName == group.ActiveSnapshot {
+		// move active/current cursor to previous
+		// current -> target(active) -> previous ==> current -> previous
+		if "" == target.Backing {
+			//no backing image available, delete root
+			group.ActiveSnapshot = ""
+			log.Printf("<storage> root snapshot '%s.%s' deleted", groupName, snapshotName)
+		} else {
+			if previousSnapshot, exists = group.Snapshots[previousName]; !exists {
+				err = fmt.Errorf("can't find previous snapshot '%s.%s' when %s deleted",
+					groupName, previousName, snapshotName)
+				errChan <- err
+				return err
+			}
+			//update previous snapshot
+			previousSnapshot.IsCurrent = true
+			group.Snapshots[previousName] = previousSnapshot
+			group.ActiveSnapshot = previousName
+			log.Printf("<storage> snapshot '%s.%s' deleted, active snapshot changed to '%s'",
+				groupName, snapshotName, previousName)
+		}
+	} else {
+		// move backing cursor to previous
+		for name, snapshot := range group.Snapshots {
+			if snapshot.Backing == snapshotName {
+				snapshot.Backing = previousName
+				group.Snapshots[name] = snapshot
+				log.Printf("<storage> snapshot '%s.%s' deleted, snapshot '%s' backing to '%s'",
+					groupName, snapshotName, name, previousName)
+				break
+			}
+		}
 	}
 	delete(group.Snapshots, snapshotName)
-	log.Printf("<storage> snapshot '%s.%s' deleted", groupName, snapshotName)
 	errChan <- taskError
 	manager.groups[groupName] = group
 	return manager.saveVolumesMeta(groupName)

@@ -81,7 +81,7 @@ type schedulerEvent struct {
 type snapshotTarget struct {
 	Current string `json:"current"`
 	Backing string `json:"backing,omitempty"`
-	Backed  bool   `json:"backed,omitempty"`
+	Backed  string `json:"backed,omitempty"`
 }
 
 type IOScheduler struct {
@@ -504,8 +504,7 @@ func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, t
 		if err = os.Rename(current, backing); err != nil {
 			return err
 		}
-		var cmd = exec.Command("qemu-img", "create", "-f", "qcow2", "-b", backing, current)
-		if err = cmd.Run(); err != nil {
+		if err = backingImage(current, backing, imageFormatDefault); err != nil {
 			return err
 		}
 		log.Printf("<scheduler-%s> '%s' created on '%s'",
@@ -531,10 +530,10 @@ func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, 
 		if err = os.Remove(current); err != nil {
 			return err
 		}
-		var cmd = exec.Command("qemu-img", "create", "-f", "qcow2", "-b", backing, current)
-		if err = cmd.Run(); err != nil {
+		if err = backingImage(current, backing, imageFormatDefault); err != nil {
 			return err
 		}
+
 		log.Printf("<scheduler-%s> '%s' reverted to '%s'",
 			scheduler.name, current, backing)
 	}
@@ -544,19 +543,41 @@ func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, 
 }
 
 func (scheduler *IOScheduler) handleDeleteSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventDeleteSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventDeleteSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
+	defer func() {
+		if nil != err {
+			event.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+	}()
+
 	for _, target := range targets {
-		file := target.Backing
-		if err = os.Remove(file); err != nil {
-			log.Printf("<scheduler-%s> warning: delete snapshot file '%s' fail: %s",
-				scheduler.name, file, err.Error())
+		var targetFile = target.Current
+		if "" == target.Backed {
+			//no backing file, remove only
+			if err = os.Remove(targetFile); err != nil {
+				log.Printf("<scheduler-%s> warning: delete snapshot file '%s' fail: %s",
+					scheduler.name, targetFile, err.Error())
+			} else {
+				log.Printf("<scheduler-%s> snapshot file '%s' deleted",
+					scheduler.name, targetFile)
+			}
 		} else {
-			log.Printf("<scheduler-%s> snapshot file '%s' deleted",
-				scheduler.name, file)
+			// merge current to backed
+			var backedFile = target.Backed
+			if err = commitImage(backedFile); err != nil {
+				err = fmt.Errorf("commit image '%s' fail when delete snapshot: %s", backedFile, err.Error())
+				return
+			}
+			if err = os.Remove(backedFile); err != nil {
+				err = fmt.Errorf("delete snapshot file '%s' fail after merging: %s", backedFile, err.Error())
+				return
+			}
+			if err = os.Rename(targetFile, backedFile); err != nil {
+				err = fmt.Errorf("rename snapshot file '%s' fail after merging: %s", targetFile, err.Error())
+				return
+			}
+			log.Printf("<scheduler-%s> snapshot file '%s' merged to '%s'", scheduler.name, targetFile, backedFile)
 		}
 	}
 	log.Printf("<scheduler-%s> %d files deleted with snapshot '%s.%s'",
@@ -619,4 +640,26 @@ func bytesToString(sizeInBytes uint64) string {
 	} else {
 		return fmt.Sprintf("%.02f %s", value, unit)
 	}
+}
+
+const (
+	imageCommand       = "qemu-img"
+	imageFormatQCOW2   = "qcow2"
+	imageFormatDefault = imageFormatQCOW2
+)
+
+func backingImage(imagePath, backingPath, imageFormat string) (err error) {
+	var cmd = exec.Command(imageCommand, "create", "-f", imageFormat, "-b", backingPath, imagePath)
+	if err = cmd.Run(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func commitImage(imagePath string) (err error) {
+	var cmd = exec.Command(imageCommand, "commit", imagePath)
+	if err = cmd.Run(); err != nil {
+		return err
+	}
+	return nil
 }
