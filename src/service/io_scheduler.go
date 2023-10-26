@@ -240,7 +240,7 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 			}
 			pipeFinished <- true
 		}()
-		multiWriter.WriteField(CheckSumField, checkSum)
+		_ = multiWriter.WriteField(CheckSumField, checkSum)
 		filePartWriter, err := multiWriter.CreateFormFile(FieldName, image)
 		if err != nil {
 			log.Printf("<scheduler-%s> create writer field fail: %s", scheduler.name, err.Error())

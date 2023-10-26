@@ -6,7 +6,6 @@ import (
 	"github.com/libvirt/libvirt-go"
 	"github.com/pkg/errors"
 	"github.com/project-nano/framework"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -444,16 +443,18 @@ func (manager *StorageManager) saveVolumesMeta(groupName string) (err error) {
 		if currentPool.Mode == StorageModeNFS {
 			//save volume meta
 			var metaFile = filepath.Join(currentPool.Target, fmt.Sprintf("%s.%s", groupName, VolumeMetaFileSuffix))
-			group, exists := manager.groups[groupName]
+			var group InstanceVolumeGroup
+			group, exists = manager.groups[groupName]
 			if !exists {
 				err = fmt.Errorf("invalid group '%s'", groupName)
 				return err
 			}
-			data, err := json.MarshalIndent(group, "", " ")
+			var data []byte
+			data, err = json.MarshalIndent(group, "", " ")
 			if err != nil {
 				return err
 			}
-			if err = ioutil.WriteFile(metaFile, data, ConfigFilePerm); err != nil {
+			if err = os.WriteFile(metaFile, data, ConfigFilePerm); err != nil {
 				return err
 			}
 			log.Printf("<storage> volume meta for '%s' saved to '%s'", groupName, metaFile)
@@ -491,7 +492,7 @@ func (manager *StorageManager) saveConfig() (err error) {
 		err = fmt.Errorf("generate config data fail: %s", err.Error())
 		return err
 	}
-	if err = ioutil.WriteFile(manager.dataFile, data, ConfigFilePerm); err != nil {
+	if err = os.WriteFile(manager.dataFile, data, ConfigFilePerm); err != nil {
 		err = fmt.Errorf("write config fail: %s", err.Error())
 		return err
 	}
@@ -503,7 +504,7 @@ func (manager *StorageManager) loadConfig() (err error) {
 	if _, err = os.Stat(manager.dataFile); !os.IsNotExist(err) {
 		//exists
 		var data []byte
-		if data, err = ioutil.ReadFile(manager.dataFile); err != nil {
+		if data, err = os.ReadFile(manager.dataFile); err != nil {
 			err = fmt.Errorf("read config fail: %s", err.Error())
 			return
 		}
@@ -675,7 +676,7 @@ func (manager *StorageManager) handleCreateVolumes(instanceID string, systemSize
 	case BootTypeCloudInit:
 		group.BootImage, err = buildCloudInitImage(manager.initiatorIP, pool.Target, instanceID)
 		if err != nil {
-			manager.utility.DeleteVolumes(poolName, volNames)
+			_ = manager.utility.DeleteVolumes(poolName, volNames)
 			resp <- StorageResult{Error: err}
 			return err
 		}
@@ -706,7 +707,7 @@ func (manager *StorageManager) handleDeleteVolumes(instanceID string, resp chan 
 	}
 	//lock for update
 	group.Locked = true
-	var targets = map[string][]string{group.System.Pool: []string{group.System.Name}}
+	var targets = map[string][]string{group.System.Pool: {group.System.Name}}
 	for _, vol := range group.Data {
 		volumes, exists := targets[vol.Pool]
 		if !exists {
@@ -1399,7 +1400,7 @@ func (manager *StorageManager) handleDetachStorage(respChan chan error) (err err
 		if !exists {
 			log.Printf("<storage> warning: no scheduler available for pool '%s'", poolName)
 		} else {
-			scheduler.Stop()
+			_ = scheduler.Stop()
 			delete(manager.schedulers, poolName)
 			log.Printf("<storage> scheduler of pool '%s' released", poolName)
 		}
@@ -1438,7 +1439,8 @@ func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan
 	}
 	for _, groupName := range groups {
 		var metaFile = filepath.Join(currentPool.Target, fmt.Sprintf("%s.%s", groupName, VolumeMetaFileSuffix))
-		data, err := ioutil.ReadFile(metaFile)
+		var data []byte
+		data, err = os.ReadFile(metaFile)
 		if err != nil {
 			respChan <- err
 			return err
@@ -1464,7 +1466,7 @@ func (manager *StorageManager) handleAttachVolumeGroup(groups []string, respChan
 
 func (manager *StorageManager) handleDetachVolumeGroup(groups []string, respChan chan error) (err error) {
 	if 0 == len(groups) {
-		for groupName, _ := range manager.groups {
+		for groupName := range manager.groups {
 			groups = append(groups, groupName)
 		}
 	}
@@ -1877,7 +1879,7 @@ func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath strin
 		fmt.Fprintf(file, "dsmode: %s\n", NetMode)
 		var url = fmt.Sprintf("http://%s:%d/latest/%s/\n", initiatorIP, InitiatorMagicPort, guestID)
 		fmt.Fprintf(file, "seedfrom: %s", url)
-		file.Close()
+		_ = file.Close()
 	}
 	var userFilePath = filepath.Join(tmpPath, UserData)
 	{
@@ -1886,7 +1888,7 @@ func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath strin
 		if err != nil {
 			return "", err
 		}
-		file.Close()
+		_ = file.Close()
 	}
 
 	var imageName = fmt.Sprintf("%s_ci.iso", guestID)
