@@ -493,6 +493,7 @@ type InstanceManager struct {
 	eventListeners  map[string]chan InstanceStatusChangedEvent
 	randomGenerator *rand.Rand
 	runner          *framework.SimpleRunner
+	maxGuest        int
 }
 
 func CreateInstanceManager(dataPath string, connect *libvirt.Connect) (manager *InstanceManager, err error) {
@@ -540,6 +541,14 @@ func (manager *InstanceManager) GetInstanceNetworkResources() (result map[string
 			InternalAddress: instance.InternalAddress,
 			ExternalAddress: instance.ExternalAddress,
 		}
+	}
+	return result
+}
+
+func (manager *InstanceManager) GetInstanceVolumeResources() (result map[string][]string) {
+	result = map[string][]string{}
+	for instanceID, instance := range manager.instances {
+		result[instanceID] = instance.StorageVolumes
 	}
 	return result
 }
@@ -671,6 +680,10 @@ func (manager *InstanceManager) UsingStorage(name, url string, respChan chan err
 	manager.commands <- instanceCommand{Type: InsCmdUsingStorage, Name: name, URL: url, ErrorChan: respChan}
 }
 
+func (manager *InstanceManager) GetMaxGuest() int {
+	return manager.maxGuest
+}
+
 func (manager *InstanceManager) DetachStorage(respChan chan error) {
 	manager.commands <- instanceCommand{Type: InsCmdDetachStorage, ErrorChan: respChan}
 }
@@ -712,6 +725,7 @@ func (manager *InstanceManager) GetAllInstance(resp chan []GuestConfig) {
 	cmd := instanceCommand{Type: InsCmdGetAllConfig, AllConfigChan: resp}
 	manager.commands <- cmd
 }
+
 func (manager *InstanceManager) IsInstanceRunning(id string, resp chan bool) {
 	cmd := instanceCommand{Type: InsCmdIsRunning, Instance: id, BoolChan: resp}
 	manager.commands <- cmd
@@ -838,6 +852,7 @@ type instanceDataConfig struct {
 	Instances   []GuestConfig `json:"instances"`
 	StoragePool string        `json:"storage_pool,omitempty"`
 	StorageURL  string        `json:"storage_url,omitempty"`
+	MaxGuest    int           `json:"max_guest,omitempty"`
 }
 
 func (manager *InstanceManager) saveInstanceConfig(instanceID string) (err error) {
@@ -886,11 +901,12 @@ func (manager *InstanceManager) saveConfig() error {
 	}
 	config.StoragePool = manager.storagePool
 	config.StorageURL = manager.storageURL
+	config.MaxGuest = manager.maxGuest
 	data, err := json.MarshalIndent(config, "", " ")
 	if err != nil {
 		return err
 	}
-	if err = ioutil.WriteFile(manager.dataFile, data, ConfigFilePerm); err != nil {
+	if err = os.WriteFile(manager.dataFile, data, ConfigFilePerm); err != nil {
 		return err
 	}
 	log.Printf("<instance> %d guest(es) saved into '%s'", len(config.Instances), manager.dataFile)
@@ -898,20 +914,30 @@ func (manager *InstanceManager) saveConfig() error {
 }
 
 func (manager *InstanceManager) loadConfig() error {
+	const (
+		defaultMaxGuest = 100
+	)
 	if _, err := os.Stat(manager.dataFile); os.IsNotExist(err) {
 		log.Println("<instance> no instance data available")
 		return nil
 	}
-	data, err := ioutil.ReadFile(manager.dataFile)
+	data, err := os.ReadFile(manager.dataFile)
 	if err != nil {
 		return err
 	}
+
 	var config instanceDataConfig
 	if err = json.Unmarshal(data, &config); err != nil {
 		return err
 	}
+	if config.MaxGuest > 0 {
+		manager.maxGuest = config.MaxGuest
+	} else {
+		manager.maxGuest = defaultMaxGuest
+	}
 	for _, ins := range config.Instances {
-		realStatus, err := manager.util.GetInstanceStatus(ins.ID)
+		var realStatus InstanceStatus
+		realStatus, err = manager.util.GetInstanceStatus(ins.ID)
 		if err != nil {
 			return err
 		}
@@ -926,21 +952,23 @@ func (manager *InstanceManager) loadConfig() error {
 		}
 		if realStatus.Running {
 			realStatus.GuestConfig = ins
-			manager.StartCPUMonitor(&realStatus)
+			_ = manager.StartCPUMonitor(&realStatus)
 			manager.instances[ins.ID] = realStatus
 		} else {
 			//load as static config
 			manager.instances[ins.ID] = InstanceStatus{GuestConfig: ins}
 		}
 	}
+	log.Printf("<instance> %d / %d guest(es) loaded from '%s'",
+		len(manager.instances), manager.maxGuest, manager.dataFile)
 	if "" != config.StoragePool {
 		manager.storagePool = config.StoragePool
 		manager.storageURL = config.StorageURL
+		log.Printf("<instance> using storage pool '%s' at '%s'", manager.storagePool, manager.storageURL)
 	} else {
 		manager.storagePool = DefaultLocalPoolName
+		log.Printf("<instance> using local storage pool '%s'", manager.storagePool)
 	}
-	log.Printf("<instance> %d guest(es) loaded from '%s', current storage '%s'", len(manager.instances),
-		manager.dataFile, manager.storagePool)
 	return nil
 }
 
@@ -1157,11 +1185,12 @@ func (manager *InstanceManager) handleStartInstance(id string, resp chan error) 
 	}
 	log.Printf("<instance> instance '%s' started", id)
 	ins.Running = true
-	manager.StartCPUMonitor(&ins)
+	_ = manager.StartCPUMonitor(&ins)
 	manager.instances[id] = ins
 	resp <- nil
 	return nil
 }
+
 func (manager *InstanceManager) handleStartInstanceWithMedia(id string, media InstanceMediaConfig, resp chan error) error {
 	ins, exist := manager.instances[id]
 	if !exist {
@@ -1542,6 +1571,7 @@ func (manager *InstanceManager) handleAttachMedia(id string, media InstanceMedia
 	log.Printf("<instance> media '%s' attached to '%s'", media.ID, ins.Name)
 	return nil
 }
+
 func (manager *InstanceManager) handleDetachMedia(id string, resp chan error) (err error) {
 	ins, exists := manager.instances[id]
 	if !exists {

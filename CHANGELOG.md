@@ -5,11 +5,15 @@
 ### Added
 
 - Add testcases for storage manager
+- Add option 'max_guest' to configure file "data/instance.data", default value is 100
 
 ### Changed
 
 - Refuse to create disk image when snapshots available
 - Allow to delete root and active snapshot
+- Sync network resources when startup
+- Validate storage volumes when startup
+- Add custom cpu model for Windows 2016 compatible and better performance
 
 ### Fixed
 

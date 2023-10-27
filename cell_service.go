@@ -165,7 +165,12 @@ func (cell *CellService) InitialEndpoint() error {
 		return err
 	}
 
-	if cell.networkManager, err = service.CreateNetworkManager(cell.DataPath, cell.virConnect); err != nil {
+	if cell.networkManager, err = service.CreateNetworkManager(
+		cell.DataPath, cell.virConnect, cell.insManager.GetMaxGuest()); err != nil {
+		return err
+	}
+	var volumeResources = cell.insManager.GetInstanceVolumeResources()
+	if err = cell.storageManager.ValidateResources(volumeResources); err != nil {
 		return err
 	}
 	var networkResources = cell.insManager.GetInstanceNetworkResources()

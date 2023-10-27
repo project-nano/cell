@@ -26,7 +26,7 @@ type virDomainOSElement struct {
 }
 
 type virDomainInterfaceTarget struct {
-	Device  string `xml:"dev,attr,omitempty"`
+	Device string `xml:"dev,attr,omitempty"`
 }
 
 type virDomainInterfaceSource struct {
@@ -133,7 +133,22 @@ type virDomainDevicesElement struct {
 }
 
 type virDomainCpuElement struct {
-	Topology virDomainCpuTopology `xml:"topology"`
+	Mode     string                `xml:"mode,attr,omitempty"`
+	Match    string                `xml:"match,attr,omitempty"`
+	Check    string                `xml:"check,attr,omitempty"`
+	Model    []virDomainCpuModel   `xml:"model,omitempty"`
+	Features []virDomainCpuFeature `xml:"feature,omitempty"`
+	Topology virDomainCpuTopology  `xml:"topology"`
+}
+
+type virDomainCpuModel struct {
+	Model    string `xml:",innerxml"`
+	Fallback string `xml:"fallback,attr,omitempty"`
+}
+
+type virDomainCpuFeature struct {
+	Policy string `xml:"policy,attr,omitempty"`
+	Name   string `xml:"name,attr"`
 }
 
 type virDomainCpuTopology struct {
@@ -167,7 +182,6 @@ type virDomainFeatureAPIC struct {
 	XMLName xml.Name `xml:"apic"`
 }
 
-
 type virDomainFeatureElement struct {
 	PAE  *virDomainFeaturePAE
 	ACPI *virDomainFeatureACPI
@@ -185,7 +199,7 @@ type virDomainDiskDriver struct {
 
 type virDomainDiskSourceHost struct {
 	Name string `xml:"name,attr"`
-	Port uint    `xml:"port,attr"`
+	Port uint   `xml:"port,attr"`
 }
 
 type virDomainDiskSource struct {
@@ -277,7 +291,7 @@ type virNwfilterDefine struct {
 }
 
 const (
-	IDEOffsetCDROM      = iota
+	IDEOffsetCDROM = iota
 	IDEOffsetCIDATA
 	IDEOffsetDISK
 )
@@ -333,7 +347,7 @@ const (
 )
 
 type InstanceUtility struct {
-	virConnect      *libvirt.Connect
+	virConnect *libvirt.Connect
 }
 
 func CreateInstanceUtility(connect *libvirt.Connect) (util *InstanceUtility, err error) {
@@ -346,22 +360,22 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 	var virDomain *libvirt.Domain
 	var virNwfilter *libvirt.NWFilter
 	defer func() {
-		if nil != err{
-			if nil != virDomain{
+		if nil != err {
+			if nil != virDomain {
 				_ = virDomain.Undefine()
 			}
-			if nil != virNwfilter{
+			if nil != virNwfilter {
 				_ = virNwfilter.Undefine()
 			}
 		}
 	}()
 	var nwfilterDefine = policyToFilter(generateNwfilterName(config.ID), config.ID, config.Security)
 	var xmlData []byte
-	if xmlData, err = xml.MarshalIndent(nwfilterDefine, "", " ");err != nil{
+	if xmlData, err = xml.MarshalIndent(nwfilterDefine, "", " "); err != nil {
 		err = fmt.Errorf("generate nwfilter define for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
-	if virNwfilter, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil{
+	if virNwfilter, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil {
 		err = fmt.Errorf("create nwfilter for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
@@ -371,17 +385,17 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 		return
 	}
 
-	if xmlData, err = xml.MarshalIndent(domainDefine, "", " ");err != nil{
+	if xmlData, err = xml.MarshalIndent(domainDefine, "", " "); err != nil {
 		err = fmt.Errorf("generete domain define for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
 	virDomain, err = util.virConnect.DomainDefineXML(string(xmlData))
-	if err != nil{
+	if err != nil {
 		err = fmt.Errorf("create domain for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
-	if config.AutoStart{
-		if err = virDomain.SetAutostart(true);err != nil{
+	if config.AutoStart {
+		if err = virDomain.SetAutostart(true); err != nil {
 			err = fmt.Errorf("enable auto start for instance '%s' fail: %s", config.Name, err.Error())
 			return
 		}
@@ -406,8 +420,8 @@ func (util *InstanceUtility) DeleteInstance(id string) (err error) {
 		return fmt.Errorf("instance '%s' is running", id)
 	}
 	var virNwfilter *libvirt.NWFilter
-	if virNwfilter, err = util.virConnect.LookupNWFilterByName(generateNwfilterName(id)); err == nil{
-		if err = virNwfilter.Undefine(); err != nil{
+	if virNwfilter, err = util.virConnect.LookupNWFilterByName(generateNwfilterName(id)); err == nil {
+		if err = virNwfilter.Undefine(); err != nil {
 			return fmt.Errorf("delete nwfilter of instance %s fail: %s", id, err.Error())
 		}
 	}
@@ -422,43 +436,43 @@ func (util *InstanceUtility) Exists(id string) bool {
 	return true
 }
 
-func (util *InstanceUtility) GetCPUTimes(id string) (usedNanoseconds uint64, cores uint, err error){
+func (util *InstanceUtility) GetCPUTimes(id string) (usedNanoseconds uint64, cores uint, err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return
 	}
 	info, err := virDomain.GetInfo()
-	if err != nil{
+	if err != nil {
 		return
 	}
 	return info.CpuTime, info.NrVirtCpu, nil
 }
 
-func (util *InstanceUtility) GetIPv4Address(id, mac string) (ip string, err error){
+func (util *InstanceUtility) GetIPv4Address(id, mac string) (ip string, err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return
 	}
 	isRunning, err := virDomain.IsActive()
-	if err != nil{
+	if err != nil {
 		return
 	}
-	if !isRunning{
+	if !isRunning {
 		err = fmt.Errorf("instance '%s' not running", id)
 		return
 	}
 	ifs, err := virDomain.ListAllInterfaceAddresses(libvirt.DOMAIN_INTERFACE_ADDRESSES_SRC_AGENT)
-	if err != nil{
+	if err != nil {
 		return
 	}
-	for _, guestInterface := range ifs{
-		if guestInterface.Hwaddr == mac{
-			if 0 == len(guestInterface.Addrs){
+	for _, guestInterface := range ifs {
+		if guestInterface.Hwaddr == mac {
+			if 0 == len(guestInterface.Addrs) {
 				err = fmt.Errorf("no address found in interface '%s'", guestInterface.Name)
 				return "", err
 			}
-			for _, addr := range guestInterface.Addrs{
-				if libvirt.IP_ADDR_TYPE_IPV4 == libvirt.IPAddrType(addr.Type){
+			for _, addr := range guestInterface.Addrs {
+				if libvirt.IP_ADDR_TYPE_IPV4 == libvirt.IPAddrType(addr.Type) {
 					ip = addr.Addr
 					return ip, nil
 				}
@@ -479,7 +493,7 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 		return ins, err
 	}
 	ins.Running = isRunning
-	if !isRunning{
+	if !isRunning {
 		return ins, nil
 	}
 	//running status
@@ -487,57 +501,57 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 		//memory stats
 		var statsCount = uint32(libvirt.DOMAIN_MEMORY_STAT_LAST)
 		memStats, err := virDomain.MemoryStats(statsCount, 0)
-		if err != nil{
+		if err != nil {
 			return ins, err
 		}
 		//size in KB
 		var availableValue, rssValue uint64 = 0, 0
-		for _, stats := range memStats{
-			if stats.Tag == int32(libvirt.DOMAIN_MEMORY_STAT_AVAILABLE){
+		for _, stats := range memStats {
+			if stats.Tag == int32(libvirt.DOMAIN_MEMORY_STAT_AVAILABLE) {
 				availableValue = stats.Val
 				break
-			}else if stats.Tag == int32(libvirt.DOMAIN_MEMORY_STAT_RSS){
+			} else if stats.Tag == int32(libvirt.DOMAIN_MEMORY_STAT_RSS) {
 				rssValue = stats.Val
 			}
 		}
-		if 0 != availableValue{
+		if 0 != availableValue {
 			ins.AvailableMemory = availableValue << 10
-		}else if 0 != rssValue{
+		} else if 0 != rssValue {
 			maxMemory, err := virDomain.GetMaxMemory()
-			if err != nil{
+			if err != nil {
 				err = fmt.Errorf("get max memory of guest '%s' fail: %s", id, err.Error())
 				return ins, err
 			}
-			if rssValue < maxMemory{
-				ins.AvailableMemory = (maxMemory- rssValue) << 10
-			}else{
+			if rssValue < maxMemory {
+				ins.AvailableMemory = (maxMemory - rssValue) << 10
+			} else {
 				ins.AvailableMemory = 0
 			}
 			//log.Printf("debug: max %d, rss %d, avail %d", maxMemory, rssValue, ins.AvailableMemory)
 			//log.Println("<instance> warning: available memory stats not supported, using (max - rss) instead")
-		}else{
+		} else {
 			return ins, errors.New("available or rss memory stats not supported")
 		}
 	}
 	desc, err := virDomain.GetXMLDesc(0)
-	if err != nil{
+	if err != nil {
 		return ins, err
 	}
 	var define virDomainDefine
-	if err = xml.Unmarshal([]byte(desc), &define); err != nil{
+	if err = xml.Unmarshal([]byte(desc), &define); err != nil {
 		return ins, err
 	}
 
 	{
 		//disk io
 		const (
-			DiskTypeVolume  = "volume"
+			DiskTypeVolume = "volume"
 		)
 		ins.BytesRead = 0
 		ins.BytesWritten = 0
 		ins.AvailableDisk = 0
-		for _, virDisk := range define.Devices.Disks{
-			if virDisk.Type != DiskTypeVolume{
+		for _, virDisk := range define.Devices.Disks {
+			if virDisk.Type != DiskTypeVolume {
 				continue
 			}
 			var devName = virDisk.Target.Device
@@ -549,7 +563,7 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 			//ins.AvailableDisk += info.Capacity - info.Allocation
 			ins.AvailableDisk = 0
 			stats, err := virDomain.BlockStats(devName)
-			if err != nil{
+			if err != nil {
 				return ins, err
 			}
 			ins.BytesRead += uint64(stats.RdBytes)
@@ -560,13 +574,13 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 		//network io
 		ins.BytesSent = 0
 		ins.BytesReceived = 0
-		for index, inf := range define.Devices.Interface{
-			if inf.Target == nil{
+		for index, inf := range define.Devices.Interface {
+			if inf.Target == nil {
 				return ins, fmt.Errorf("no target available for interface %d", index)
 			}
 
 			stats, err := virDomain.InterfaceStats(inf.Target.Device)
-			if err != nil{
+			if err != nil {
 				return ins, err
 			}
 			ins.BytesReceived += uint64(stats.RxBytes)
@@ -576,7 +590,7 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 	return ins, nil
 }
 
-func (util *InstanceUtility) IsInstanceRunning(id string) (bool, error){
+func (util *InstanceUtility) IsInstanceRunning(id string) (bool, error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return false, err
@@ -614,39 +628,39 @@ func (util *InstanceUtility) StartInstanceWithMedia(id, host, url string, port u
 
 	var ideDevChar = StartDeviceCharacter
 
-	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar +IDEOffsetCDROM)
+	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar+IDEOffsetCDROM)
 
 	var deviceWithMedia, deviceWithoutMedia string
 	var readyOnly = true
 	{
 		//empty ide cdrom
-		var emptyDriver = virDomainDiskElement{Type:DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+		var emptyDriver = virDomainDiskElement{Type: DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
 			Target: virDomainDiskTarget{devName, DiskBusIDE}, ReadOnly: &readyOnly}
 		if data, err := xml.MarshalIndent(emptyDriver, "", " "); err != nil {
 			return err
-		}else{
+		} else {
 			deviceWithoutMedia = string(data)
 		}
 	}
 	{
-		var mediaSource = virDomainDiskSource{Protocol: ProtocolHTTPS, Name: url, Host:&virDomainDiskSourceHost{host, port}}
-		var driverWithMedia = virDomainDiskElement{Type:DiskTypeNetwork, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
-			Target: virDomainDiskTarget{devName, DiskBusIDE}, Source:&mediaSource, ReadOnly: &readyOnly}
+		var mediaSource = virDomainDiskSource{Protocol: ProtocolHTTPS, Name: url, Host: &virDomainDiskSourceHost{host, port}}
+		var driverWithMedia = virDomainDiskElement{Type: DiskTypeNetwork, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+			Target: virDomainDiskTarget{devName, DiskBusIDE}, Source: &mediaSource, ReadOnly: &readyOnly}
 		if data, err := xml.MarshalIndent(driverWithMedia, "", " "); err != nil {
 			return err
-		}else{
+		} else {
 			deviceWithMedia = string(data)
 		}
 	}
 	//change config before start
-	if err = virDomain.UpdateDeviceFlags(deviceWithMedia, libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil{
+	if err = virDomain.UpdateDeviceFlags(deviceWithMedia, libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil {
 		return err
 	}
-	if err = virDomain.Create();err != nil{
+	if err = virDomain.Create(); err != nil {
 		return err
 	}
 	//change live config only
-	if err = virDomain.UpdateDeviceFlags(deviceWithoutMedia, libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil{
+	if err = virDomain.UpdateDeviceFlags(deviceWithoutMedia, libvirt.DOMAIN_DEVICE_MODIFY_CONFIG); err != nil {
 		virDomain.Destroy()
 		return err
 	}
@@ -696,17 +710,17 @@ func (util *InstanceUtility) InsertMedia(id, host, url string, port uint) (err e
 	//assume first ide device as cdrom
 	var ideDevChar = StartDeviceCharacter
 
-	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar +IDEOffsetCDROM)
+	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar+IDEOffsetCDROM)
 
 	var deviceWithMedia string
 	{
 		var readyOnly = true
-		var mediaSource = virDomainDiskSource{Protocol: ProtocolHTTPS, Name: url, Host:&virDomainDiskSourceHost{host, port}}
-		var driverWithMedia = virDomainDiskElement{Type:DiskTypeNetwork, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
-			Target: virDomainDiskTarget{devName, DiskBusIDE}, Source:&mediaSource, ReadOnly: &readyOnly}
+		var mediaSource = virDomainDiskSource{Protocol: ProtocolHTTPS, Name: url, Host: &virDomainDiskSourceHost{host, port}}
+		var driverWithMedia = virDomainDiskElement{Type: DiskTypeNetwork, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+			Target: virDomainDiskTarget{devName, DiskBusIDE}, Source: &mediaSource, ReadOnly: &readyOnly}
 		if data, err := xml.MarshalIndent(driverWithMedia, "", " "); err != nil {
 			return err
-		}else{
+		} else {
 			deviceWithMedia = string(data)
 		}
 	}
@@ -728,16 +742,16 @@ func (util *InstanceUtility) EjectMedia(id string) (err error) {
 	}
 	//assume first ide device as cdrom
 	var ideDevChar = StartDeviceCharacter
-	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar +IDEOffsetCDROM)
+	var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, ideDevChar+IDEOffsetCDROM)
 	var deviceWithoutMedia string
 	{
 		var readyOnly = true
 		//empty ide cdrom
-		var emptyDriver = virDomainDiskElement{Type:DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+		var emptyDriver = virDomainDiskElement{Type: DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
 			Target: virDomainDiskTarget{devName, DiskBusIDE}, ReadOnly: &readyOnly}
 		if data, err := xml.MarshalIndent(emptyDriver, "", " "); err != nil {
 			return err
-		}else{
+		} else {
 			deviceWithoutMedia = string(data)
 		}
 	}
@@ -745,8 +759,7 @@ func (util *InstanceUtility) EjectMedia(id string) (err error) {
 	return virDomain.UpdateDeviceFlags(deviceWithoutMedia, libvirt.DOMAIN_DEVICE_MODIFY_LIVE)
 }
 
-
-func (util *InstanceUtility) ModifyCPUTopology(id string, core uint, immediate bool) (err error){
+func (util *InstanceUtility) ModifyCPUTopology(id string, core uint, immediate bool) (err error) {
 	const (
 		TopologyFormat = "<topology sockets='%d' cores='%d' threads='%d'/>"
 	)
@@ -756,16 +769,16 @@ func (util *InstanceUtility) ModifyCPUTopology(id string, core uint, immediate b
 	}
 	var currentDomain virDomainDefine
 	xmlDesc, err := virDomain.GetXMLDesc(0)
-	if err != nil{
+	if err != nil {
 		return err
 	}
-	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil{
+	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil {
 		return err
 	}
 	var previousDefine = fmt.Sprintf(TopologyFormat, currentDomain.CPU.Topology.Sockets,
 		currentDomain.CPU.Topology.Cores, currentDomain.CPU.Topology.Threads)
 	var newTopology = virDomainCpuTopology{}
-	if err = newTopology.SetCpuTopology(core); err != nil{
+	if err = newTopology.SetCpuTopology(core); err != nil {
 		return
 	}
 
@@ -773,48 +786,48 @@ func (util *InstanceUtility) ModifyCPUTopology(id string, core uint, immediate b
 		newTopology.Cores, newTopology.Threads)
 
 	var modifiedData = strings.Replace(xmlDesc, previousDefine, replaceData, 1)
-	if virDomain, err = util.virConnect.DomainDefineXML(modifiedData); err != nil{
+	if virDomain, err = util.virConnect.DomainDefineXML(modifiedData); err != nil {
 		return err
 	}
-	if err = virDomain.SetVcpusFlags(core, libvirt.DOMAIN_VCPU_CONFIG| libvirt.DOMAIN_VCPU_MAXIMUM); err != nil{
+	if err = virDomain.SetVcpusFlags(core, libvirt.DOMAIN_VCPU_CONFIG|libvirt.DOMAIN_VCPU_MAXIMUM); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (util *InstanceUtility) ModifyCore(id string, core uint, immediate bool) (err error){
+func (util *InstanceUtility) ModifyCore(id string, core uint, immediate bool) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return err
 	}
-	if err = virDomain.SetVcpusFlags(core, libvirt.DOMAIN_VCPU_CONFIG); err != nil{
+	if err = virDomain.SetVcpusFlags(core, libvirt.DOMAIN_VCPU_CONFIG); err != nil {
 		return
 	}
 	return nil
 }
 
-func (util *InstanceUtility) ModifyMemory(id string, memory uint, immediate bool) (err error){
+func (util *InstanceUtility) ModifyMemory(id string, memory uint, immediate bool) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return err
 	}
 	var memoryInKiB = uint64(memory >> 10)
 	maxMemory, err := virDomain.GetMaxMemory()
-	if err != nil{
+	if err != nil {
 		return err
 	}
-	if memoryInKiB > maxMemory{
-		if err = virDomain.SetMemoryFlags(memoryInKiB, libvirt.DOMAIN_MEM_CONFIG| libvirt.DOMAIN_MEM_MAXIMUM); err != nil{
+	if memoryInKiB > maxMemory {
+		if err = virDomain.SetMemoryFlags(memoryInKiB, libvirt.DOMAIN_MEM_CONFIG|libvirt.DOMAIN_MEM_MAXIMUM); err != nil {
 			return
 		}
 	}
-	if err = virDomain.SetMemoryFlags(memoryInKiB, libvirt.DOMAIN_MEM_CONFIG); err != nil{
+	if err = virDomain.SetMemoryFlags(memoryInKiB, libvirt.DOMAIN_MEM_CONFIG); err != nil {
 		return
 	}
 	return nil
 }
 
-func (util *InstanceUtility) ModifyPassword(id, user, password string) (err error){
+func (util *InstanceUtility) ModifyPassword(id, user, password string) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(id)
 	if err != nil {
 		return err
@@ -823,61 +836,61 @@ func (util *InstanceUtility) ModifyPassword(id, user, password string) (err erro
 	return err
 }
 
-func (util *InstanceUtility) ModifyAutoStart(guestID string, enable bool) (err error){
+func (util *InstanceUtility) ModifyAutoStart(guestID string, enable bool) (err error) {
 	var virDomain *libvirt.Domain
 	if virDomain, err = util.virConnect.LookupDomainByUUIDString(guestID); err != nil {
 		err = fmt.Errorf("get guest fail: %s", err.Error())
 		return
 	}
 	var current bool
-	if current, err = virDomain.GetAutostart(); err != nil{
+	if current, err = virDomain.GetAutostart(); err != nil {
 		err = fmt.Errorf("check auto start status fail: %s", err.Error())
 		return
 	}
-	if current == enable{
-		if current{
+	if current == enable {
+		if current {
 			err = fmt.Errorf("auto start of guest '%s' already enabled", guestID)
-		}else{
+		} else {
 			err = fmt.Errorf("auto start of guest '%s' already disabled", guestID)
 		}
 		return
 	}
-	if err = virDomain.SetAutostart(enable); err != nil{
+	if err = virDomain.SetAutostart(enable); err != nil {
 		err = fmt.Errorf("set auto start fail: %s", err.Error())
 		return
 	}
 	return
 }
 
-func (util *InstanceUtility) SetCPUThreshold(guestID string, priority PriorityEnum) (err error){
+func (util *InstanceUtility) SetCPUThreshold(guestID string, priority PriorityEnum) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(guestID)
 	if err != nil {
 		return err
 	}
 	var xmlContent string
 	xmlContent, err = virDomain.GetXMLDesc(0)
-	if err != nil{
+	if err != nil {
 		return
 	}
 	var newDefine virDomainDefine
-	if err = xml.Unmarshal([]byte(xmlContent), &newDefine); err != nil{
+	if err = xml.Unmarshal([]byte(xmlContent), &newDefine); err != nil {
 		return
 	}
-	if err = setCPUPriority(&newDefine, priority); err != nil{
+	if err = setCPUPriority(&newDefine, priority); err != nil {
 		return
 	}
 	data, err := xml.MarshalIndent(newDefine, "", " ")
-	if err != nil{
+	if err != nil {
 		return err
 	}
-	_, err =  util.virConnect.DomainDefineXML(string(data))
-	if err != nil{
+	_, err = util.virConnect.DomainDefineXML(string(data))
+	if err != nil {
 		err = fmt.Errorf("define fail: %s, content: %s", err.Error(), string(data))
 	}
 	return
 }
 
-func setCPUPriority(domain *virDomainDefine, priority PriorityEnum) (err error){
+func setCPUPriority(domain *virDomainDefine, priority PriorityEnum) (err error) {
 	const (
 		periodPerSecond = 1000000
 		quotaPerSecond  = 1000000
@@ -905,24 +918,24 @@ func setCPUPriority(domain *virDomainDefine, priority PriorityEnum) (err error){
 	return nil
 }
 
-func (util *InstanceUtility) SetDiskThreshold(guestID string, writeSpeed, writeIOPS, readSpeed, readIOPS uint64) (err error){
+func (util *InstanceUtility) SetDiskThreshold(guestID string, writeSpeed, writeIOPS, readSpeed, readIOPS uint64) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(guestID)
 	if err != nil {
 		return err
 	}
 	var currentDomain virDomainDefine
 	xmlDesc, err := virDomain.GetXMLDesc(0)
-	if err != nil{
+	if err != nil {
 		return err
 	}
-	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil{
+	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil {
 		return err
 	}
 	var activated bool
-	if activated, err = virDomain.IsActive(); err != nil{
+	if activated, err = virDomain.IsActive(); err != nil {
 		return err
 	}
-	if activated{
+	if activated {
 		err = fmt.Errorf("instance %s ('%s') is still running", currentDomain.Name, guestID)
 		return
 	}
@@ -958,7 +971,7 @@ func (util *InstanceUtility) SetDiskThreshold(guestID string, writeSpeed, writeI
 		}
 		//static configure
 		var tune = dev.IoTune
-		if tune == nil{
+		if tune == nil {
 			tune = &virDomainDiskTune{}
 		}
 		tune.WriteIOPerSecond = int(writeIOPS)
@@ -968,10 +981,10 @@ func (util *InstanceUtility) SetDiskThreshold(guestID string, writeSpeed, writeI
 
 		dev.IoTune = tune
 		data, err := xml.MarshalIndent(dev, "", " ")
-		if err != nil{
+		if err != nil {
 			return err
 		}
-		if err = virDomain.UpdateDeviceFlags(string(data), impactFlag); err != nil{
+		if err = virDomain.UpdateDeviceFlags(string(data), impactFlag); err != nil {
 			err = fmt.Errorf("update device fail: %s, content: %s", err.Error(), string(data))
 			return err
 		}
@@ -979,29 +992,29 @@ func (util *InstanceUtility) SetDiskThreshold(guestID string, writeSpeed, writeI
 	return nil
 }
 
-func (util *InstanceUtility) SetNetworkThreshold(guestID string, receiveSpeed, sendSpeed uint64) (err error){
+func (util *InstanceUtility) SetNetworkThreshold(guestID string, receiveSpeed, sendSpeed uint64) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(guestID)
 	if err != nil {
 		return err
 	}
 	var currentDomain virDomainDefine
 	xmlDesc, err := virDomain.GetXMLDesc(0)
-	if err != nil{
+	if err != nil {
 		return err
 	}
-	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil{
+	if err = xml.Unmarshal([]byte(xmlDesc), &currentDomain); err != nil {
 		return err
 	}
 	var activated bool
-	if activated, err = virDomain.IsActive(); err != nil{
+	if activated, err = virDomain.IsActive(); err != nil {
 		return err
 	}
 	//var affectFlag = libvirt.DOMAIN_AFFECT_CONFIG | libvirt.DOMAIN_AFFECT_LIVE
 	var affectFlag = libvirt.DOMAIN_AFFECT_LIVE
 	//API params
 	var parameters libvirt.DomainInterfaceParameters
-	if activated{
-		if 0 != receiveSpeed{
+	if activated {
+		if 0 != receiveSpeed {
 			parameters.BandwidthInAverageSet = true
 			parameters.BandwidthInAverage = uint(receiveSpeed >> 10) //kbytes
 			parameters.BandwidthInPeakSet = true
@@ -1009,7 +1022,7 @@ func (util *InstanceUtility) SetNetworkThreshold(guestID string, receiveSpeed, s
 			parameters.BandwidthInBurstSet = true
 			parameters.BandwidthInBurst = uint(receiveSpeed >> 10)
 		}
-		if 0 != sendSpeed{
+		if 0 != sendSpeed {
 			parameters.BandwidthOutAverageSet = true
 			parameters.BandwidthOutAverage = uint(sendSpeed >> 10) //kbytes
 			parameters.BandwidthOutPeakSet = true
@@ -1021,27 +1034,27 @@ func (util *InstanceUtility) SetNetworkThreshold(guestID string, receiveSpeed, s
 	//configure params
 	var impactFlag = libvirt.DOMAIN_DEVICE_MODIFY_CONFIG
 	var bandWidth = virDomainInterfaceBandwidth{}
-	if 0 != receiveSpeed{
+	if 0 != receiveSpeed {
 		var inbound = virDomainInterfaceLimit{uint(receiveSpeed >> 10), uint(receiveSpeed >> 9), uint(receiveSpeed >> 10)}
 		bandWidth.Inbound = &inbound
 	}
-	if 0 != sendSpeed{
+	if 0 != sendSpeed {
 		var outbound = virDomainInterfaceLimit{uint(sendSpeed >> 10), uint(sendSpeed >> 9), uint(sendSpeed >> 10)}
 		bandWidth.Outbound = &outbound
 	}
 
-	for _, netInf := range currentDomain.Devices.Interface{
-		if activated{
-			if err = virDomain.SetInterfaceParameters(netInf.Target.Device, &parameters, affectFlag); err != nil{
+	for _, netInf := range currentDomain.Devices.Interface {
+		if activated {
+			if err = virDomain.SetInterfaceParameters(netInf.Target.Device, &parameters, affectFlag); err != nil {
 				return
 			}
 		}
 		netInf.Bandwidth = &bandWidth
 		data, err := xml.MarshalIndent(netInf, "", " ")
-		if err != nil{
+		if err != nil {
 			return err
 		}
-		if err = virDomain.UpdateDeviceFlags(string(data), impactFlag); err != nil{
+		if err = virDomain.UpdateDeviceFlags(string(data), impactFlag); err != nil {
 			err = fmt.Errorf("update device fail: %s, content: %s", err.Error(), string(data))
 			return err
 		}
@@ -1049,7 +1062,7 @@ func (util *InstanceUtility) SetNetworkThreshold(guestID string, receiveSpeed, s
 	return nil
 }
 
-func (util *InstanceUtility) Rename(uuid, newName string) (err error){
+func (util *InstanceUtility) Rename(uuid, newName string) (err error) {
 	virDomain, err := util.virConnect.LookupDomainByUUIDString(uuid)
 	if err != nil {
 		return err
@@ -1063,23 +1076,23 @@ func (util *InstanceUtility) Rename(uuid, newName string) (err error){
 	}
 	var currentName string
 	currentName, err = virDomain.GetName()
-	if err != nil{
+	if err != nil {
 		return
 	}
-	if currentName == newName{
-		return  errors.New("no need to change")
+	if currentName == newName {
+		return errors.New("no need to change")
 	}
 	return virDomain.Rename(newName, 0)
 }
 
-func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, port uint, secret string) (err error){
+func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, port uint, secret string) (err error) {
 	var virDomain *libvirt.Domain
 	if virDomain, err = util.virConnect.LookupDomainByUUIDString(uuid); err != nil {
 		err = fmt.Errorf("invalid guest '%s'", uuid)
 		return err
 	}
 	var isRunning bool
-	if isRunning, err = virDomain.IsActive();err != nil {
+	if isRunning, err = virDomain.IsActive(); err != nil {
 		err = fmt.Errorf("check running status fail: %s", err.Error())
 		return err
 	}
@@ -1094,68 +1107,68 @@ func (util *InstanceUtility) ResetMonitorSecret(uuid string, display string, por
 		Listen:   &virDomainGraphicsListen{ListenTypeAddress, ListenAllAddress},
 	}
 	var payload []byte
-	if payload, err = xml.Marshal(graphics); err != nil{
+	if payload, err = xml.Marshal(graphics); err != nil {
 		err = fmt.Errorf("generate graphic element fail: %s", err.Error())
 		return
 	}
-	if err = virDomain.UpdateDeviceFlags(string(payload), updateFlag); err != nil{
+	if err = virDomain.UpdateDeviceFlags(string(payload), updateFlag); err != nil {
 		err = fmt.Errorf("update graphic element fail: %s", err.Error())
 		return
 	}
 	return nil
 }
 
-func (util *InstanceUtility) InitialDomainNwfilter(instanceID string, policy SecurityPolicy) (err error){
+func (util *InstanceUtility) InitialDomainNwfilter(instanceID string, policy SecurityPolicy) (err error) {
 	var filterName = generateNwfilterName(instanceID)
 	var xmlData []byte
 	var xmlString string
 	var filterDefine = policyToFilter(filterName, instanceID, &policy)
-	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil{
+	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil {
 		err = fmt.Errorf("generate nwfilter xml for instance '%s' fail: %s", instanceID, err.Error())
 		return
 	}
-	if _, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil{
+	if _, err = util.virConnect.NWFilterDefineXML(string(xmlData)); err != nil {
 		err = fmt.Errorf("create nwfilter for guest '%s' fail: %s", instanceID, err.Error())
 		return
 	}
 	{
 		var virDomain *libvirt.Domain
-		if virDomain, err = util.virConnect.LookupDomainByUUIDString(instanceID); err != nil{
+		if virDomain, err = util.virConnect.LookupDomainByUUIDString(instanceID); err != nil {
 			err = fmt.Errorf("invalid guest id '%s'", instanceID)
 			return
 		}
 
-		if xmlString, err = virDomain.GetXMLDesc(0); err != nil{
+		if xmlString, err = virDomain.GetXMLDesc(0); err != nil {
 			err = fmt.Errorf("get xml of guest '%s' fail: %s", instanceID, err.Error())
 			return
 		}
 		var domainDefine virDomainDefine
-		if err = xml.Unmarshal([]byte(xmlString), &domainDefine); err != nil{
+		if err = xml.Unmarshal([]byte(xmlString), &domainDefine); err != nil {
 			err = fmt.Errorf("unmarshal xml of guest '%s' fail: %s", instanceID, err.Error())
 			return
 		}
 		var isActive bool
-		if isActive, err = virDomain.IsActive(); err != nil{
+		if isActive, err = virDomain.IsActive(); err != nil {
 			err = fmt.Errorf("check running status of guest '%s' fail: %s", instanceID, err.Error())
 			return
 		}
 		var updateFlag = libvirt.DOMAIN_DEVICE_MODIFY_CONFIG
-		if isActive{
+		if isActive {
 			updateFlag |= libvirt.DOMAIN_DEVICE_MODIFY_LIVE
 		}
-		for _, interfaceDefine := range domainDefine.Devices.Interface{
-			if InterfaceTypeBridge == interfaceDefine.Type{
-				if nil == interfaceDefine.Filter{
+		for _, interfaceDefine := range domainDefine.Devices.Interface {
+			if InterfaceTypeBridge == interfaceDefine.Type {
+				if nil == interfaceDefine.Filter {
 					var deviceWithFilter = interfaceDefine
 					deviceWithFilter.Filter = &virNwfilterRef{
-						Filter:  filterName,
+						Filter: filterName,
 					}
-					if xmlData, err = xml.MarshalIndent(deviceWithFilter, "", " "); err != nil{
+					if xmlData, err = xml.MarshalIndent(deviceWithFilter, "", " "); err != nil {
 						err = fmt.Errorf("marshal interface device of guest '%s' fail: %s", instanceID, err.Error())
 						return
 					}
 					xmlString = string(xmlData)
-					if err = virDomain.UpdateDeviceFlags(xmlString, updateFlag); err != nil{
+					if err = virDomain.UpdateDeviceFlags(xmlString, updateFlag); err != nil {
 						err = fmt.Errorf("update nwfilter to interface of guest '%s' fail: %s", instanceID, err.Error())
 					}
 				}
@@ -1163,15 +1176,14 @@ func (util *InstanceUtility) InitialDomainNwfilter(instanceID string, policy Sec
 		}
 	}
 
-
 	return
 }
 
-func (util *InstanceUtility) SyncDomainNwfilter(id string, policy *SecurityPolicy) (err error){
+func (util *InstanceUtility) SyncDomainNwfilter(id string, policy *SecurityPolicy) (err error) {
 	var filterName = generateNwfilterName(id)
 	var filterDefine = policyToFilter(filterName, id, policy)
 	var xmlData []byte
-	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil{
+	if xmlData, err = xml.MarshalIndent(filterDefine, "", " "); err != nil {
 		err = fmt.Errorf("generate nwfilter xml for instance '%s' fail: %s", id, err.Error())
 		return
 	}
@@ -1183,15 +1195,107 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 	const (
 		BootDeviceCDROM    = "cdrom"
 		BootDeviceHardDisk = "hd"
+		cpuModeCustom      = "custom"
+		cpuMatchExact      = "exact"
+		cpuMatchMinimum    = "minimum"
+		cpuCheckPartial    = "partial"
+		cpuCheckFull       = "full"
+		modelFallbackAllow = "allow"
+		modelCore2Duo      = "core2duo"
+		cpuFeatureMonitor  = "monitor"
+		// policy: disable, require, optional, force, forbid
+		cpuFeaturePolicyDisable  = "disable"
+		cpuFeaturePolicyRequire  = "require"
+		cpuFeaturePolicyOptional = "optional"
+		cpuFeaturePolicyForce    = "force"
+		cpuFeaturePolicyForbid   = "forbid"
 	)
+	const (
+		modelIntelHaswell = "Haswell"
+		modelAMDOpteronG5 = "Opteron_G5"
+		modelDefault      = modelIntelHaswell
+	)
+
 	define.Initial()
 	define.Name = config.Name
 	define.UUID = config.ID
 	define.Memory = config.Memory >> 10
 	define.VCpu = config.Cores
 
+	//for windows 2016 compatibility
+	//<cpu mode='custom' match='exact' check='partial'>
+	//<model fallback='allow'>core2duo</model>
+	//<feature name='monitor' policy='disable'/>
+	//<topology sockets='1' cores='1' threads='1'/>
+	//</cpu>
+	define.CPU.Mode = cpuModeCustom
+	define.CPU.Match = cpuMatchMinimum
+	define.CPU.Check = cpuCheckPartial
+	define.CPU.Model = []virDomainCpuModel{
+		{
+			Model:    modelDefault,
+			Fallback: modelFallbackAllow,
+		},
+	}
+	{
+		//CPU features
+		var forced = []string{
+			"acpi",
+			"apic",
+			"pae",
+		}
+		var disabled = []string{
+			cpuFeatureMonitor,
+			"hle",
+			"rtm",
+		}
+		var preferedIntel = []string{
+			"pcid",
+			"spec-ctrl",
+			"stibp",
+			"ssbd",
+			"pdpe1gb",
+			"md-clear",
+		}
+		var preferedAMD = []string{
+			"ibpb",
+			"stibp",
+			"virt-ssbd",
+			"pdpe1gb",
+		}
+		//merge optional features
+		// feature => true
+		var prefered = map[string]bool{}
+		for _, feature := range preferedIntel {
+			prefered[feature] = true
+		}
+		for _, feature := range preferedAMD {
+			prefered[feature] = true
+		}
+		var features = make([]virDomainCpuFeature, 0)
+		for _, feature := range forced {
+			features = append(features, virDomainCpuFeature{
+				Name:   feature,
+				Policy: cpuFeaturePolicyForce,
+			})
+		}
+		for _, feature := range disabled {
+			features = append(features, virDomainCpuFeature{
+				Name:   feature,
+				Policy: cpuFeaturePolicyDisable,
+			})
+		}
+		for feature := range prefered {
+			features = append(features, virDomainCpuFeature{
+				Name:   feature,
+				Policy: cpuFeaturePolicyOptional,
+			})
+		}
+		define.CPU.Features = features
+	}
+
 	//cpu
-	if err = setCPUPriority(&define, config.CPUPriority); err != nil{
+	if err = setCPUPriority(&define, config.CPUPriority); err != nil {
 		err = fmt.Errorf("set CPU prioirity fail: %s", err.Error())
 		return
 	}
@@ -1199,7 +1303,10 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 		err = fmt.Errorf("set CPU topology fail: %s", err.Error())
 		return
 	}
-	define.OS.BootOrder = []virDomainBootDevice{virDomainBootDevice{BootDeviceCDROM}, virDomainBootDevice{BootDeviceHardDisk}}
+	define.OS.BootOrder = []virDomainBootDevice{
+		{Device: BootDeviceCDROM},
+		{Device: BootDeviceHardDisk},
+	}
 	define.SetVideoDriver(config.Template.Display)
 
 	switch config.StorageMode {
@@ -1230,7 +1337,7 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 		return
 	}
 	//tablet
-	if config.Template.Tablet != TabletBusNone{
+	if config.Template.Tablet != TabletBusNone {
 		define.Devices.Input = append(define.Devices.Input, virDomainInput{InputTablet, config.Template.Tablet})
 	}
 	if config.Template.USB != USBModelNone {
@@ -1242,11 +1349,11 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 func (topology *virDomainCpuTopology) SetCpuTopology(totalThreads uint) error {
 	const (
 		//SplitThreshold = 4
-		ThreadPerCore  = 2
-		MaxCores       = 1 << 5
-		MaxSockets     = 1 << 3
+		ThreadPerCore = 2
+		MaxCores      = 1 << 5
+		MaxSockets    = 1 << 3
 	)
-	if (totalThreads > 1 ) && (0 != (totalThreads % 2)) {
+	if (totalThreads > 1) && (0 != (totalThreads % 2)) {
 		return fmt.Errorf("even core number ( %d ) is not allowed", totalThreads)
 	}
 	var threads, cores, sockets uint
@@ -1285,33 +1392,33 @@ func (define *virDomainDefine) SetLocalVolumes(diskBus, pool string, volumes []s
 	var readyOnly = true
 	{
 		//empty ide cdrom
-		var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, StartDeviceCharacter + IDEOffsetCDROM)
-		var cdromElement = virDomainDiskElement{Type:DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+		var devName = fmt.Sprintf("%s%c", DevicePrefixIDE, StartDeviceCharacter+IDEOffsetCDROM)
+		var cdromElement = virDomainDiskElement{Type: DiskTypeBlock, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
 			Target: virDomainDiskTarget{devName, DiskBusIDE}, ReadOnly: &readyOnly}
 		define.Devices.Disks = append(define.Devices.Disks, cdromElement)
 	}
-	if "" != bootImage{
+	if "" != bootImage {
 		//cdrom for ci data
-		var ciDevice = fmt.Sprintf("%s%c", DevicePrefixIDE, StartDeviceCharacter + IDEOffsetCIDATA)
-		var isoSource = virDomainDiskSource{File:bootImage}
-		var ciElement = virDomainDiskElement{Type:DiskTypeFile, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
-			Target: virDomainDiskTarget{ciDevice, DiskBusIDE}, Source:&isoSource, ReadOnly: &readyOnly}
+		var ciDevice = fmt.Sprintf("%s%c", DevicePrefixIDE, StartDeviceCharacter+IDEOffsetCIDATA)
+		var isoSource = virDomainDiskSource{File: bootImage}
+		var ciElement = virDomainDiskElement{Type: DiskTypeFile, Device: DeviceCDROM, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeRaw},
+			Target: virDomainDiskTarget{ciDevice, DiskBusIDE}, Source: &isoSource, ReadOnly: &readyOnly}
 		define.Devices.Disks = append(define.Devices.Disks, ciElement)
 	}
 	var devicePrefix string
 	var devChar int
-	if DiskBusIDE == diskBus{
+	if DiskBusIDE == diskBus {
 		//ide device
 		devChar = StartDeviceCharacter + IDEOffsetDISK
 		devicePrefix = DevicePrefixIDE
-	}else{
+	} else {
 		//sata/scsi
 		devChar = StartDeviceCharacter
 		devicePrefix = DevicePrefixSCSI
 	}
 
 	var ioTune *virDomainDiskTune
-	if 0 != writeSpeed || 0 != writeIOPS || 0 != readSpeed || 0 != readIOPS{
+	if 0 != writeSpeed || 0 != writeIOPS || 0 != readSpeed || 0 != readIOPS {
 		var limit = virDomainDiskTune{}
 		limit.ReadBytePerSecond = uint(readSpeed)
 		limit.ReadIOPerSecond = int(readIOPS)
@@ -1320,12 +1427,12 @@ func (define *virDomainDefine) SetLocalVolumes(diskBus, pool string, volumes []s
 		ioTune = &limit
 	}
 
-	for _, volumeName := range volumes{
+	for _, volumeName := range volumes {
 		var devName = fmt.Sprintf("%s%c", devicePrefix, devChar)
-		var source = virDomainDiskSource{Pool:pool, Volume:volumeName}
-		var diskElement = virDomainDiskElement{Type:DiskTypeVolume, Device: DeviceDisk, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeQCOW2},
-			Target: virDomainDiskTarget{devName, diskBus}, Source:&source}
-		if ioTune != nil{
+		var source = virDomainDiskSource{Pool: pool, Volume: volumeName}
+		var diskElement = virDomainDiskElement{Type: DiskTypeVolume, Device: DeviceDisk, Driver: virDomainDiskDriver{DriverNameQEMU, DriverTypeQCOW2},
+			Target: virDomainDiskTarget{devName, diskBus}, Source: &source}
+		if ioTune != nil {
 			diskElement.IoTune = ioTune
 		}
 		define.Devices.Disks = append(define.Devices.Disks, diskElement)
@@ -1347,19 +1454,19 @@ func (define *virDomainDefine) SetPlainNetwork(netBus, bridge, mac, filterName s
 	i.Source = virDomainInterfaceSource{Bridge: bridge}
 	i.Model = &virDomainInterfaceModel{netBus}
 	i.Filter = &virNwfilterRef{Filter: filterName}
-	if 0 != receiveSpeed || 0 != sendSpeed{
+	if 0 != receiveSpeed || 0 != sendSpeed {
 		var bandWidth = virDomainInterfaceBandwidth{}
-		if 0 != receiveSpeed{
+		if 0 != receiveSpeed {
 			var limit = virDomainInterfaceLimit{}
-			limit.Average = uint(receiveSpeed >> 10);
-			limit.Peak = uint(receiveSpeed >> 9);
+			limit.Average = uint(receiveSpeed >> 10)
+			limit.Peak = uint(receiveSpeed >> 9)
 			limit.Burst = limit.Average
 			bandWidth.Inbound = &limit
 		}
-		if 0 != sendSpeed{
+		if 0 != sendSpeed {
 			var limit = virDomainInterfaceLimit{}
-			limit.Average = uint(sendSpeed >> 10);
-			limit.Peak = uint(sendSpeed >> 9);
+			limit.Average = uint(sendSpeed >> 10)
+			limit.Peak = uint(sendSpeed >> 9)
 			limit.Burst = limit.Average
 			bandWidth.Outbound = &limit
 		}
@@ -1442,9 +1549,9 @@ func (define *virDomainDefine) Initial() {
 
 }
 
-func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfilterDefine){
+func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfilterDefine) {
 	const LowestPriority = 1000
-	if nil == policy{
+	if nil == policy {
 		//accept by default
 		policy = &SecurityPolicy{Accept: true}
 	}
@@ -1453,25 +1560,25 @@ func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfi
 	var priority = LowestPriority - len(policy.Rules) - 1
 	var outRule = virNwfilterRule{
 		Direction: NwfilterDirectionOut,
-		Priority: priority,
-		Action: NwfilterActionAccept,
+		Priority:  priority,
+		Action:    NwfilterActionAccept,
 	}
 	nwfilter.Rules = append(nwfilter.Rules, outRule)
 	priority++
-	for _, rule := range policy.Rules{
+	for _, rule := range policy.Rules {
 		var virRule = virNwfilterRule{
 			Direction: NwfilterDirectionIn,
 			Priority:  priority,
 		}
-		if rule.Accept{
+		if rule.Accept {
 			virRule.Action = NwfilterActionAccept
-		}else{
+		} else {
 			virRule.Action = NwfilterActionDrop
 		}
 		virRule.IPRule = &virNwfilerRuleIP{
-			Protocol: string(rule.Protocol),
+			Protocol:        string(rule.Protocol),
 			TargetPortStart: uint64(rule.TargetPort),
-			SourceAddress: rule.SourceAddress,
+			SourceAddress:   rule.SourceAddress,
 		}
 		nwfilter.Rules = append(nwfilter.Rules, virRule)
 		priority++
@@ -1480,15 +1587,15 @@ func policyToFilter(name, uuid string, policy *SecurityPolicy) (nwfilter virNwfi
 		Direction: NwfilterDirectionIn,
 		Priority:  priority,
 	}
-	if policy.Accept{
+	if policy.Accept {
 		defaultRule.Action = NwfilterActionAccept
-	}else{
+	} else {
 		defaultRule.Action = NwfilterActionDrop
 	}
 	nwfilter.Rules = append(nwfilter.Rules, defaultRule)
 	return
 }
 
-func generateNwfilterName(id string) string{
+func generateNwfilterName(id string) string {
 	return NwfilterPrefix + id
 }

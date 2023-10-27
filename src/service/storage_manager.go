@@ -237,6 +237,48 @@ func (manager *StorageManager) Stop() error {
 	return manager.runner.Stop()
 }
 
+func (manager *StorageManager) ValidateResources(instanceVolumes map[string][]string) (err error) {
+	defer func() {
+		if nil != err {
+			log.Printf("<storage> validate resources fail: %s", err.Error())
+		}
+	}()
+	// check omit instance
+	for instanceID, group := range manager.groups {
+		if _, exists := instanceVolumes[instanceID]; !exists {
+			log.Printf("<storage> warning: detached volumes found (%d data volumes) for instance '%s'",
+				len(group.Data), instanceID)
+		}
+	}
+	// check omit volumes
+	for instanceID, volumes := range instanceVolumes {
+		group, exists := manager.groups[instanceID]
+		if !exists {
+			err = fmt.Errorf("no volumes attached to instance '%s'", instanceID)
+			return
+		}
+		if len(volumes) != len(group.Data)+1 {
+			err = fmt.Errorf("volumes count mismatch (%d => %d) for instance '%s'",
+				len(volumes), len(group.Data)+1, instanceID)
+			return
+		}
+		var available = map[string]bool{
+			group.System.Name: true,
+		}
+		for _, volume := range group.Data {
+			available[volume.Name] = true
+		}
+		for _, volumeName := range volumes {
+			if _, exists = available[volumeName]; !exists {
+				err = fmt.Errorf("volume '%s' not attached to instance '%s'", volumeName, instanceID)
+				return
+			}
+		}
+	}
+	log.Printf("<storage> volumes of %d instances validated", len(instanceVolumes))
+	return
+}
+
 func (manager *StorageManager) notifyStoragePathsChanged() {
 	manager.outputStorageEventChan <- manager.localSystemDiskPaths
 }
@@ -787,23 +829,21 @@ func (manager *StorageManager) handleReadDiskImage(id framework.SessionID, group
 	group.Locked = true
 	manager.groups[groupName] = group
 	log.Printf("<storage> volume group %s locked for read", groupName)
-
-	scheduler.AddReadTask(id, groupName, targetVol, path, sourceImage, targetSize, imageSize, mediaHost, mediaPort)
 	//add task
 	manager.tasks[id] = PendingTask{0, progress, resultChan}
 	log.Printf("<storage> new read task %08X pending for schedule", id)
 	startChan <- nil
+
+	scheduler.AddReadTask(id, groupName, targetVol, path, sourceImage, targetSize, imageSize, mediaHost, mediaPort)
 	return nil
 }
 
 func (manager *StorageManager) handleWriteDiskImage(id framework.SessionID, groupName, targetVol, sourceImage, mediaHost string, mediaPort uint,
 	startChan chan error, progress chan uint, resultChan chan StorageResult) (err error) {
-	var result = StorageResult{}
 	defer func() {
 		if nil != err {
 			// only notify when error occurs
-			result.Error = err
-			resultChan <- result
+			startChan <- err
 		}
 	}()
 	group, exists := manager.groups[groupName]
@@ -840,12 +880,12 @@ func (manager *StorageManager) handleWriteDiskImage(id framework.SessionID, grou
 	group.Locked = true
 	manager.groups[groupName] = group
 	log.Printf("<storage> volume group %s locked for write", groupName)
-
-	scheduler.AddWriteTask(id, groupName, targetVol, path, sourceImage, mediaHost, mediaPort)
 	//add task
 	manager.tasks[id] = PendingTask{0, progress, resultChan}
 	log.Printf("<storage> new write task %08X pending for schedule", id)
 	startChan <- nil
+
+	scheduler.AddWriteTask(id, groupName, targetVol, path, sourceImage, mediaHost, mediaPort)
 	return nil
 }
 
@@ -1732,10 +1772,13 @@ func (manager *StorageManager) handleDeleteSnapshotCompleted(groupName, snapshot
 		}
 	} else {
 		// move backing cursor to previous
-		for name, snapshot := range group.Snapshots {
-			if snapshot.Backing == snapshotName {
-				snapshot.Backing = previousName
-				group.Snapshots[name] = snapshot
+		for name, backed := range group.Snapshots {
+			if backed.Backing == snapshotName {
+				backed.Backing = previousName
+				if target.IsRoot {
+					backed.IsRoot = true
+				}
+				group.Snapshots[name] = backed
 				log.Printf("<storage> snapshot '%s.%s' deleted, snapshot '%s' backing to '%s'",
 					groupName, snapshotName, name, previousName)
 				break
