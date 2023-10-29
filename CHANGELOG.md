@@ -14,6 +14,7 @@
 - Sync network resources when startup
 - Validate storage volumes when startup
 - Add custom cpu model for Windows 2016 compatible and better performance
+- Refuse to start instance when volumes locked
 
 ### Fixed
 

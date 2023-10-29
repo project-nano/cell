@@ -118,7 +118,7 @@ type StorageResult struct {
 type BootType int
 
 const (
-	BootTypeNone      = BootType(iota)
+	BootTypeNone = BootType(iota)
 	BootTypeCloudInit
 )
 
@@ -144,6 +144,7 @@ type StorageModule interface {
 	DetachVolumeGroup(groups []string, respChan chan error)
 	QueryStoragePaths(respChan chan StorageResult)
 	ChangeDefaultStoragePath(target string, respChan chan error)
+	ValidateVolumesForStart(groupName string, respChan chan error)
 }
 
 type NetworkResult struct {
@@ -168,4 +169,3 @@ type NetworkModule interface {
 	UpdateAddressAllocation(gateway string, dns []string, allocationMode string, resp chan error)
 	GetAddressByHWAddress(hwaddress string, resp chan NetworkResult)
 }
-

@@ -65,6 +65,7 @@ const (
 	storageCommandDetachVolume
 	storageCommandQueryStoragePaths
 	storageCommandChangeDefaultStoragePath
+	storageCommandValidateForStart
 	storageCommandInvalid
 )
 
@@ -369,6 +370,8 @@ func (manager *StorageManager) handleCommand(cmd storageCommand) {
 		err = manager.handleQueryStoragePaths(cmd.ResultChan)
 	case storageCommandChangeDefaultStoragePath:
 		err = manager.handleChangeDefaultStoragePath(cmd.Target, cmd.ErrorChan)
+	case storageCommandValidateForStart:
+		err = manager.handleValidateVolumesForStart(cmd.Instance, cmd.ErrorChan)
 	default:
 		log.Printf("<storage> unsupported command type %d", cmd.Type)
 	}
@@ -455,6 +458,10 @@ func (manager *StorageManager) QueryStoragePaths(respChan chan StorageResult) {
 
 func (manager *StorageManager) ChangeDefaultStoragePath(target string, respChan chan error) {
 	manager.commands <- storageCommand{Type: storageCommandChangeDefaultStoragePath, Target: target, ErrorChan: respChan}
+}
+
+func (manager *StorageManager) ValidateVolumesForStart(groupName string, respChan chan error) {
+	manager.commands <- storageCommand{Type: storageCommandValidateForStart, Instance: groupName, ErrorChan: respChan}
 }
 
 type storageDataConfig struct {
@@ -994,6 +1001,26 @@ func (manager *StorageManager) handleShrinkVolume(id framework.SessionID, groupN
 	//add task
 	manager.tasks[id] = PendingTask{ResultChan: respChan}
 	log.Printf("<storage> new shrink task %08X pending for schedule", id)
+	return nil
+}
+
+// handleValidateVolumesForStart
+func (manager *StorageManager) handleValidateVolumesForStart(groupName string, respChan chan error) (err error) {
+	defer func() {
+		if nil != err {
+			respChan <- err
+		}
+	}()
+	group, exists := manager.groups[groupName]
+	if !exists {
+		err = fmt.Errorf("invalid instance '%s'", groupName)
+		return
+	}
+	if group.Locked {
+		err = fmt.Errorf("volume group '%s' locked for update", groupName)
+		return
+	}
+	respChan <- nil
 	return nil
 }
 
