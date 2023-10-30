@@ -142,10 +142,9 @@ func (cell *CellService) OnDependencyReady() {
 	cell.SetServiceReady()
 }
 
-func (cell *CellService) InitialEndpoint() error {
+func (cell *CellService) InitialEndpoint() (err error) {
 	log.Printf("<cell> initial cell service, v %s", CurrentVersion)
 	log.Printf("<cell> domain %s, group address %s:%d", cell.GetDomain(), cell.GetGroupAddress(), cell.GetGroupPort())
-	var err error
 
 	const (
 		DefaultLibvirtURL = "qemu:///system"
@@ -154,11 +153,13 @@ func (cell *CellService) InitialEndpoint() error {
 		return err
 	}
 	if cell.storageManager, err = service.CreateStorageManager(cell.DataPath, cell.virConnect); err != nil {
-		return err
+		err = fmt.Errorf("initial storage manager fail: %s", err.Error())
+		return
 	}
 
 	if cell.insManager, err = service.CreateInstanceManager(cell.DataPath, cell.virConnect); err != nil {
-		return err
+		err = fmt.Errorf("initial instance manager fail: %s", err.Error())
+		return
 	}
 	if cell.collector, err = CreateCollectorModule(cell,
 		cell.insManager.GetEventChannel(), cell.storageManager.GetOutputEventChannel()); err != nil {

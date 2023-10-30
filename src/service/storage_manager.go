@@ -88,6 +88,7 @@ var storageCommandNames = []string{
 	"DetachVolume",
 	"QueryStoragePaths",
 	"ChangeDefaultStoragePath",
+	"ValidateVolumesForStart",
 }
 
 type storageCommand struct {
