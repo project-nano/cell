@@ -1,22 +1,22 @@
 package task
 
 import (
-	"github.com/project-nano/framework"
+	"errors"
 	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
 	"log"
 	"time"
-	"errors"
 )
 
 type QuerySnapshotExecutor struct {
-	Sender         framework.MessageSender
-	StorageModule  service.StorageModule
+	Sender        framework.MessageSender
+	StorageModule service.StorageModule
 }
 
 func (executor *QuerySnapshotExecutor) Execute(id framework.SessionID, request framework.Message,
 	incoming chan framework.Message, terminate chan bool) (err error) {
 	var instanceID string
-	if instanceID, err = request.GetString(framework.ParamKeyInstance); err != nil{
+	if instanceID, err = request.GetString(framework.ParamKeyInstance); err != nil {
 		return err
 	}
 
@@ -29,33 +29,33 @@ func (executor *QuerySnapshotExecutor) Execute(id framework.SessionID, request f
 	{
 		var respChan = make(chan service.StorageResult, 1)
 		executor.StorageModule.QuerySnapshot(instanceID, respChan)
-		var timer = time.NewTimer(service.DefaultOperateTimeout)
-		select{
-		case <- timer.C:
+		var timer = time.NewTimer(service.GetConfigurator().GetOperateTimeout())
+		select {
+		case <-timer.C:
 			err = errors.New("request timeout")
 			log.Printf("[%08X] query snapshot timeout", id)
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
-		case result := <- respChan:
-			if result.Error != nil{
+		case result := <-respChan:
+			if result.Error != nil {
 				err = result.Error
 				log.Printf("[%08X] query snapshot fail: %s", id, err.Error())
 				resp.SetError(err.Error())
-			}else{
+			} else {
 				var snapshotList = result.SnapshotList
 				var names, backings []string
 				var rootFlags, currentFlags []uint64
-				for _, snapshot := range snapshotList{
+				for _, snapshot := range snapshotList {
 					names = append(names, snapshot.Name)
 					backings = append(backings, snapshot.Backing)
-					if snapshot.IsRoot{
+					if snapshot.IsRoot {
 						rootFlags = append(rootFlags, 1)
-					}else{
+					} else {
 						rootFlags = append(rootFlags, 0)
 					}
-					if snapshot.IsCurrent{
+					if snapshot.IsCurrent {
 						currentFlags = append(currentFlags, 1)
-					}else{
+					} else {
 						currentFlags = append(currentFlags, 0)
 					}
 				}
@@ -70,4 +70,3 @@ func (executor *QuerySnapshotExecutor) Execute(id framework.SessionID, request f
 		}
 	}
 }
-

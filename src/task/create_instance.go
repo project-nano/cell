@@ -1,11 +1,11 @@
 package task
 
 import (
-	"github.com/project-nano/framework"
-	"github.com/project-nano/cell/service"
-	"log"
-	"fmt"
 	"errors"
+	"fmt"
+	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
+	"log"
 	"math/rand"
 	"time"
 )
@@ -63,15 +63,15 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		err = fmt.Errorf("get auto start flag fail: %s", err.Error())
 		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
-	if config.AuthUser, err = request.GetString(framework.ParamKeyAdmin); err != nil{
+	if config.AuthUser, err = request.GetString(framework.ParamKeyAdmin); err != nil {
 		err = fmt.Errorf("get admin name fail: %s", err.Error())
 		return executor.ResponseFail(resp, err.Error(), request.GetSender())
 	}
 	var templateOptions []uint64
-	if templateOptions, err = request.GetUIntArray(framework.ParamKeyTemplate); err != nil{
+	if templateOptions, err = request.GetUIntArray(framework.ParamKeyTemplate); err != nil {
 		err = fmt.Errorf("get template fail: %s", err.Error())
 		return executor.ResponseFail(resp, err.Error(), request.GetSender())
-	}else{
+	} else {
 		const (
 			OptionOffsetOS = iota
 			OptionOffsetDisk
@@ -82,18 +82,18 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			OptionOffsetTablet
 			ValidOptionCount
 		)
-		if ValidOptionCount != len(templateOptions){
+		if ValidOptionCount != len(templateOptions) {
 			err = fmt.Errorf("template options count mismatch %d / %d", len(templateOptions), ValidOptionCount)
 			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 		var t = service.HardwareTemplate{
 			OperatingSystem: service.TemplateOperatingSystem(templateOptions[OptionOffsetOS]).ToString(),
-			Disk: service.TemplateDiskDriver(templateOptions[OptionOffsetDisk]).ToString(),
-			Network: service.TemplateNetworkModel(templateOptions[OptionOffsetNetwork]).ToString(),
-			Display: service.TemplateDisplayDriver(templateOptions[OptionOffsetDisplay]).ToString(),
-			Control: service.TemplateRemoteControl(templateOptions[OptionOffsetControl]).ToString(),
-			USB: service.TemplateUSBModel(templateOptions[OptionOffsetUSB]).ToString(),
-			Tablet: service.TemplateTabletModel(templateOptions[OptionOffsetTablet]).ToString(),
+			Disk:            service.TemplateDiskDriver(templateOptions[OptionOffsetDisk]).ToString(),
+			Network:         service.TemplateNetworkModel(templateOptions[OptionOffsetNetwork]).ToString(),
+			Display:         service.TemplateDisplayDriver(templateOptions[OptionOffsetDisplay]).ToString(),
+			Control:         service.TemplateRemoteControl(templateOptions[OptionOffsetControl]).ToString(),
+			USB:             service.TemplateUSBModel(templateOptions[OptionOffsetUSB]).ToString(),
+			Tablet:          service.TemplateTabletModel(templateOptions[OptionOffsetTablet]).ToString(),
 		}
 		config.Template = &t
 	}
@@ -128,11 +128,11 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
 	}
-	if assignedAddress, err := request.GetStringArray(framework.ParamKeyAddress); err == nil{
+	if assignedAddress, err := request.GetStringArray(framework.ParamKeyAddress); err == nil {
 		const (
 			ValidAssignedLength = 2
 		)
-		if len(assignedAddress) != ValidAssignedLength{
+		if len(assignedAddress) != ValidAssignedLength {
 			err = fmt.Errorf("unexpect assigned addresses count %d", len(assignedAddress))
 			return executor.ResponseFail(resp, err.Error(), request.GetSender())
 		}
@@ -143,9 +143,9 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 	{
 		priorityValue, _ := request.GetUInt(framework.ParamKeyPriority)
 		config.CPUPriority = service.PriorityEnum(priorityValue)
-		if limitParameters, err := request.GetUIntArray(framework.ParamKeyLimit); err == nil{
+		if limitParameters, err := request.GetUIntArray(framework.ParamKeyLimit); err == nil {
 			const (
-				ReadSpeedOffset           = iota
+				ReadSpeedOffset = iota
 				WriteSpeedOffset
 				ReadIOPSOffset
 				WriteIOPSOffset
@@ -154,7 +154,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				ValidLimitParametersCount = 6
 			)
 
-			if ValidLimitParametersCount != len(limitParameters){
+			if ValidLimitParametersCount != len(limitParameters) {
 				err = fmt.Errorf("invalid QoS parameters count %d", len(limitParameters))
 				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
@@ -171,7 +171,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 
 	log.Printf("[%08X] require %d cores, %d MB memory", id, config.Cores, config.Memory>>20)
 	log.Printf("[%08X] IO limit: read %d, write %d per second, network limit: recv %d Kps, send %d Kps",
-		id, config.ReadIOPS, config.WriteIOPS, config.ReceiveSpeed >> 10, config.SendSpeed >> 10)
+		id, config.ReadIOPS, config.WriteIOPS, config.ReceiveSpeed>>10, config.SendSpeed>>10)
 
 	//Security Policy
 	{
@@ -181,29 +181,29 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			offsetFrom
 			offsetTo
 			offsetPort
-			validPolicyElementCount = 5//accept,protocol,from,to,port
+			validPolicyElementCount = 5 //accept,protocol,from,to,port
 		)
 		var policyParameters []uint64
-		if policyParameters, err = request.GetUIntArray(framework.ParamKeyPolicy); nil == err{
-			if 0 != len(policyParameters) % validPolicyElementCount{
+		if policyParameters, err = request.GetUIntArray(framework.ParamKeyPolicy); nil == err {
+			if 0 != len(policyParameters)%validPolicyElementCount {
 				err = fmt.Errorf("invalid policy parameters count %d", len(policyParameters))
 				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
 			var parameterCount = len(policyParameters)
 			var ruleCount = parameterCount / validPolicyElementCount
 			var securityPolicy service.SecurityPolicy
-			if securityPolicy.Accept, err = request.GetBoolean(framework.ParamKeyAction); err != nil{
+			if securityPolicy.Accept, err = request.GetBoolean(framework.ParamKeyAction); err != nil {
 				err = fmt.Errorf("get default security action fail: %s", err.Error())
 				return executor.ResponseFail(resp, err.Error(), request.GetSender())
 			}
-			for start := 0; start < parameterCount; start += validPolicyElementCount{
+			for start := 0; start < parameterCount; start += validPolicyElementCount {
 				var rule service.SecurityPolicyRule
-				if service.PolicyRuleActionAccept == policyParameters[start + offsetAccept]{
+				if service.PolicyRuleActionAccept == policyParameters[start+offsetAccept] {
 					rule.Accept = true
-				}else{
+				} else {
 					rule.Accept = false
 				}
-				switch policyParameters[start + offsetProtocol] {
+				switch policyParameters[start+offsetProtocol] {
 				case service.PolicyRuleProtocolIndexTCP:
 					rule.Protocol = service.PolicyRuleProtocolTCP
 				case service.PolicyRuleProtocolIndexUDP:
@@ -211,21 +211,21 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				case service.PolicyRuleProtocolIndexICMP:
 					rule.Protocol = service.PolicyRuleProtocolICMP
 				default:
-					err = fmt.Errorf("invalid security protocol index %d", policyParameters[start + offsetProtocol])
+					err = fmt.Errorf("invalid security protocol index %d", policyParameters[start+offsetProtocol])
 					return executor.ResponseFail(resp, err.Error(), request.GetSender())
 				}
-				rule.SourceAddress = service.UInt32ToIPv4(uint32(policyParameters[start + offsetFrom]))
-				rule.TargetAddress = service.UInt32ToIPv4(uint32(policyParameters[start + offsetTo]))
-				rule.TargetPort = uint(policyParameters[start + offsetPort])
+				rule.SourceAddress = service.UInt32ToIPv4(uint32(policyParameters[start+offsetFrom]))
+				rule.TargetAddress = service.UInt32ToIPv4(uint32(policyParameters[start+offsetTo]))
+				rule.TargetPort = uint(policyParameters[start+offsetPort])
 				securityPolicy.Rules = append(securityPolicy.Rules, rule)
 				//log.Printf("[%08X] debug: policy parameters %d, %d, %d, %d, %d",
 				//	id, policyParameters[start + offsetAccept], policyParameters[start + offsetProtocol], policyParameters[start + offsetFrom],
 				//	policyParameters[start + offsetTo], policyParameters[start + offsetPort])
 			}
 			config.Security = &securityPolicy
-			if ruleCount > 0{
+			if ruleCount > 0 {
 				log.Printf("[%08X] %d security rule(s) with default accept: %t",
-					id,	len(securityPolicy.Rules), securityPolicy.Accept)
+					id, len(securityPolicy.Rules), securityPolicy.Accept)
 			}
 		}
 	}
@@ -418,7 +418,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		)
 		config.MonitorSecret = executor.generatePassword(MonitorSecretLength)
 		executor.InstanceModule.CreateInstance(config, errChan)
-		err = <- errChan
+		err = <-errChan
 		if err != nil {
 			executor.ReleaseResource(id, config.ID, true, true, false)
 			log.Printf("[%08X] create instance fail: %s", id, err.Error())
@@ -445,7 +445,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		if err = executor.Sender.SendMessage(event, request.GetSender()); err != nil {
 			log.Printf("[%08X] warning: notify instance created fail: %s", id, err.Error())
 		}
-		if config.AutoStart{
+		if config.AutoStart {
 			executor.startAutoStartInstance(id, config.ID, config.Name, request.GetSender())
 		}
 		return nil
@@ -464,7 +464,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 		executor.StorageModule.ReadDiskImage(id, config.ID, targetVol, imageID, uint64(systemSize), uint64(imageSize), mediaHost, mediaPort,
 			startChan, progressChan, resultChan)
 		{
-			var timer = time.NewTimer(service.DefaultOperateTimeout)
+			var timer = time.NewTimer(service.GetConfigurator().GetOperateTimeout())
 			select {
 			case err = <-startChan:
 				if err != nil {
@@ -492,7 +492,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 			select {
 			case <-ticker.C:
 				//check
-				if time.Now().After(latestUpdate.Add(service.DefaultOperateTimeout)) {
+				if time.Now().After(latestUpdate.Add(service.GetConfigurator().GetOperateTimeout())) {
 					//timeout
 					err = errors.New("timeout")
 					log.Printf("[%08X] clone disk image fail: %s", id, err.Error())
@@ -526,7 +526,7 @@ func (executor *CreateInstanceExecutor) Execute(id framework.SessionID, request 
 				if err = executor.Sender.SendMessage(created, request.GetSender()); err != nil {
 					log.Printf("[%08X] warning: notify instance created fail: %s", id, err.Error())
 				}
-				if config.AutoStart{
+				if config.AutoStart {
 					executor.startAutoStartInstance(id, config.ID, config.Name, request.GetSender())
 				}
 				return nil
@@ -578,8 +578,8 @@ func (executor *CreateInstanceExecutor) ReleaseNetworkResource(id framework.Sess
 func (executor *CreateInstanceExecutor) startAutoStartInstance(id framework.SessionID, instanceID, instanceName, receiver string) {
 	var respChan = make(chan error, 1)
 	executor.InstanceModule.StartInstance(instanceID, respChan)
-	var err = <- respChan
-	if err != nil{
+	var err = <-respChan
+	if err != nil {
 		log.Printf("[%08X] warning: start autostart instance '%s' fail: %s", id, instanceName, err.Error())
 		return
 	}
@@ -588,7 +588,7 @@ func (executor *CreateInstanceExecutor) startAutoStartInstance(id framework.Sess
 	event, _ := framework.CreateJsonMessage(framework.GuestStartedEvent)
 	event.SetFromSession(id)
 	event.SetString(framework.ParamKeyInstance, instanceID)
-	if err = executor.Sender.SendMessage(event, receiver); err != nil{
+	if err = executor.Sender.SendMessage(event, receiver); err != nil {
 		log.Printf("[%08X] notify guest started to '%s' fail: %s", id, receiver, err.Error())
 	}
 }
@@ -618,7 +618,7 @@ func (executor *CreateInstanceExecutor) generatePassword(length int) string {
 	return string(result)
 }
 
-func (executor *CreateInstanceExecutor)ResponseFail(resp framework.Message, err , target string) error{
+func (executor *CreateInstanceExecutor) ResponseFail(resp framework.Message, err, target string) error {
 	resp.SetSuccess(false)
 	resp.SetError(err)
 	return executor.Sender.SendMessage(resp, target)

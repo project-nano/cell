@@ -1,18 +1,18 @@
 package task
 
 import (
-	"github.com/project-nano/framework"
-	"github.com/project-nano/cell/service"
-	"log"
-	"fmt"
-	"time"
 	"errors"
+	"fmt"
+	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
+	"log"
+	"time"
 )
 
 type ResetGuestSystemExecutor struct {
-	Sender          framework.MessageSender
-	InstanceModule  service.InstanceModule
-	StorageModule   service.StorageModule
+	Sender         framework.MessageSender
+	InstanceModule service.InstanceModule
+	StorageModule  service.StorageModule
 }
 
 func (executor *ResetGuestSystemExecutor) Execute(id framework.SessionID, request framework.Message,
@@ -47,21 +47,21 @@ func (executor *ResetGuestSystemExecutor) Execute(id framework.SessionID, reques
 		var respChan = make(chan service.InstanceResult, 1)
 		//check instance
 		executor.InstanceModule.GetInstanceStatus(guestID, respChan)
-		var result = <- respChan
-		if result.Error != nil{
+		var result = <-respChan
+		if result.Error != nil {
 			err = result.Error
 			log.Printf("[%08X] get instance fail: %s", id, err.Error())
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
 		}
 		var ins = result.Instance
-		if ins.Running{
+		if ins.Running {
 			err = fmt.Errorf("guest '%s' is still running", ins.Name)
 			log.Printf("[%08X] check instance fail: %s", id, err.Error())
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
 		}
-		if 0 == len(ins.StorageVolumes){
+		if 0 == len(ins.StorageVolumes) {
 			err = fmt.Errorf("no volumes available for guest '%s'", ins.Name)
 			log.Printf("[%08X] check instance fail: %s", id, err.Error())
 			resp.SetError(err.Error())
@@ -79,14 +79,14 @@ func (executor *ResetGuestSystemExecutor) Execute(id framework.SessionID, reques
 			startChan, progressChan, resultChan)
 		//wait start
 		{
-			var timer = time.NewTimer(service.DefaultOperateTimeout)
+			var timer = time.NewTimer(service.GetConfigurator().GetOperateTimeout())
 			select {
 			case err = <-startChan:
 				if err != nil {
 					log.Printf("[%08X] start reset system image fail: %s", id, err.Error())
 					resp.SetError(err.Error())
 					return executor.Sender.SendMessage(resp, request.GetSender())
-				}else{
+				} else {
 					//started
 					log.Printf("[%08X] reset system image started...", id)
 					resp.SetSuccess(true)
@@ -121,7 +121,7 @@ func (executor *ResetGuestSystemExecutor) Execute(id framework.SessionID, reques
 			select {
 			case <-ticker.C:
 				//check
-				if time.Now().After(latestUpdate.Add(service.DefaultOperateTimeout)) {
+				if time.Now().After(latestUpdate.Add(service.GetConfigurator().GetOperateTimeout())) {
 					//timeout
 					err = errors.New("wait reset progress timeout")
 					log.Printf("[%08X] reset system image fail: %s", id, err.Error())
@@ -147,7 +147,7 @@ func (executor *ResetGuestSystemExecutor) Execute(id framework.SessionID, reques
 				{
 					var errChan = make(chan error, 1)
 					executor.InstanceModule.ResetGuestSystem(guestID, errChan)
-					if err = <- errChan; err != nil{
+					if err = <-errChan; err != nil {
 						log.Printf("[%08X] reset guest system fail: %s", id, err.Error())
 						resetEvent.SetSuccess(false)
 						resetEvent.SetError(err.Error())

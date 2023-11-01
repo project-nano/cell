@@ -1,12 +1,12 @@
 package task
 
 import (
-	"github.com/project-nano/framework"
-	"github.com/project-nano/cell/service"
-	"log"
 	"fmt"
-	"time"
 	"github.com/pkg/errors"
+	"github.com/project-nano/cell/service"
+	"github.com/project-nano/framework"
+	"log"
+	"time"
 )
 
 type DeleteSnapshotExecutor struct {
@@ -19,10 +19,10 @@ func (executor *DeleteSnapshotExecutor) Execute(id framework.SessionID, request 
 	incoming chan framework.Message, terminate chan bool) (err error) {
 	var instanceID string
 	var snapshot string
-	if instanceID, err = request.GetString(framework.ParamKeyInstance); err != nil{
+	if instanceID, err = request.GetString(framework.ParamKeyInstance); err != nil {
 		return err
 	}
-	if snapshot, err = request.GetString(framework.ParamKeyName); err != nil{
+	if snapshot, err = request.GetString(framework.ParamKeyName); err != nil {
 		return err
 	}
 
@@ -35,27 +35,27 @@ func (executor *DeleteSnapshotExecutor) Execute(id framework.SessionID, request 
 	{
 		var respChan = make(chan service.InstanceResult, 1)
 		executor.InstanceModule.GetInstanceStatus(instanceID, respChan)
-		var result = <- respChan
-		if result.Error != nil{
+		var result = <-respChan
+		if result.Error != nil {
 			err = result.Error
 			log.Printf("[%08X] get instance fail: %s", id, err.Error())
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
 		}
 
-		err = func(instance service.InstanceStatus) (err error){
-			if !instance.Created{
+		err = func(instance service.InstanceStatus) (err error) {
+			if !instance.Created {
 				err = fmt.Errorf("instance '%s' not created", instanceID)
 				return
 			}
 			//todo: allow operating on branch snapshots
-			if instance.Running{
+			if instance.Running {
 				err = errors.New("live snapshot not supported yes, shutdown instance first")
 				return
 			}
 			return nil
 		}(result.Instance)
-		if err != nil{
+		if err != nil {
 			log.Printf("[%08X] check instance fail: %s", id, err.Error())
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
@@ -64,18 +64,18 @@ func (executor *DeleteSnapshotExecutor) Execute(id framework.SessionID, request 
 	{
 		var respChan = make(chan error, 1)
 		executor.StorageModule.DeleteSnapshot(instanceID, snapshot, respChan)
-		var timer = time.NewTimer(service.DefaultOperateTimeout)
-		select{
-		case <- timer.C:
+		var timer = time.NewTimer(service.GetConfigurator().GetOperateTimeout())
+		select {
+		case <-timer.C:
 			err = errors.New("request timeout")
 			log.Printf("[%08X] delete snapshot timeout", id)
 			resp.SetError(err.Error())
 			return executor.Sender.SendMessage(resp, request.GetSender())
 		case err = <-respChan:
-			if err != nil{
+			if err != nil {
 				log.Printf("[%08X] delete snapshot fail: %s", id, err.Error())
 				resp.SetError(err.Error())
-			}else{
+			} else {
 				log.Printf("[%08X] snapshot '%s' deleted from guest '%s'", id, snapshot, instanceID)
 				resp.SetSuccess(true)
 			}

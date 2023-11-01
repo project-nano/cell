@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 const (
@@ -145,6 +146,7 @@ func (cell *CellService) OnDependencyReady() {
 func (cell *CellService) InitialEndpoint() (err error) {
 	log.Printf("<cell> initial cell service, v %s", CurrentVersion)
 	log.Printf("<cell> domain %s, group address %s:%d", cell.GetDomain(), cell.GetGroupAddress(), cell.GetGroupPort())
+	log.Printf("<cell> default operate timeout %d seconds", service.GetConfigurator().GetOperateTimeout()/time.Second)
 
 	const (
 		DefaultLibvirtURL = "qemu:///system"

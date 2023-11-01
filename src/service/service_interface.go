@@ -6,10 +6,9 @@ import (
 )
 
 const (
-	ConfigFilePerm        = 0600
-	DefaultOperateTimeout = 5 * time.Second
-	APIRoot               = "/api"
-	APIVersion            = 1
+	ConfigFilePerm = 0600
+	APIRoot        = "/api"
+	APIVersion     = 1
 )
 
 type InstanceResult struct {
@@ -168,4 +167,29 @@ type NetworkModule interface {
 	DetachInstances(instances []string, resp chan error)
 	UpdateAddressAllocation(gateway string, dns []string, allocationMode string, resp chan error)
 	GetAddressByHWAddress(hwaddress string, resp chan NetworkResult)
+}
+
+type Configurator struct {
+	operateTimeout time.Duration
+}
+
+func (c *Configurator) SetOperateTimeout(timeoutInSeconds int) {
+	c.operateTimeout = time.Duration(timeoutInSeconds) * time.Second
+}
+
+// GetOperateTimeout : get operate timeout
+func (c *Configurator) GetOperateTimeout() time.Duration {
+	return c.operateTimeout
+}
+
+const (
+	defaultOperateTimeout = 10 //10 seconds
+)
+
+var globalConfigurator = Configurator{
+	operateTimeout: defaultOperateTimeout * time.Second,
+}
+
+func GetConfigurator() *Configurator {
+	return &globalConfigurator
 }

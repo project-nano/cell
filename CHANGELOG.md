@@ -6,6 +6,7 @@
 
 - Add testcases for storage manager
 - Add option 'max_guest' to configure file "data/instance.data", default value is 100
+- Add option 'timeout' to configure file "domain.cfg", default value is 10 seconds
 
 ### Changed
 
