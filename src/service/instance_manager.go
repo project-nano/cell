@@ -917,8 +917,11 @@ func (manager *InstanceManager) loadConfig() error {
 	const (
 		defaultMaxGuest = 100
 	)
+	manager.storagePool = DefaultLocalPoolName
+	manager.maxGuest = defaultMaxGuest
 	if _, err := os.Stat(manager.dataFile); os.IsNotExist(err) {
-		log.Println("<instance> no instance data available")
+		log.Printf("<instance> no instance configured, default max guest %d, using local storage pool %s",
+			manager.maxGuest, manager.storagePool)
 		return nil
 	}
 	data, err := os.ReadFile(manager.dataFile)
@@ -932,8 +935,6 @@ func (manager *InstanceManager) loadConfig() error {
 	}
 	if config.MaxGuest > 0 {
 		manager.maxGuest = config.MaxGuest
-	} else {
-		manager.maxGuest = defaultMaxGuest
 	}
 	for _, ins := range config.Instances {
 		var realStatus InstanceStatus
@@ -966,7 +967,6 @@ func (manager *InstanceManager) loadConfig() error {
 		manager.storageURL = config.StorageURL
 		log.Printf("<instance> using storage pool '%s' at '%s'", manager.storagePool, manager.storageURL)
 	} else {
-		manager.storagePool = DefaultLocalPoolName
 		log.Printf("<instance> using local storage pool '%s'", manager.storagePool)
 	}
 	return nil
