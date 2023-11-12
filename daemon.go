@@ -195,18 +195,18 @@ func configureNetworkForCell() (err error) {
 	if err = linkBridge(interfaceName, service.DefaultBridgeName); err != nil {
 		return
 	}
-
+	var errorMessage []byte
 	{
 		//disable & stop network manager
 		var cmd = exec.Command("systemctl", "stop", "NetworkManager")
-		if err = cmd.Run(); err != nil {
-			fmt.Printf("warning: stop networkmanager fail: %s", err.Error())
+		if errorMessage, err = cmd.CombinedOutput(); err != nil {
+			fmt.Printf("warning: stop networkmanager fail: %s", errorMessage)
 		} else {
 			fmt.Println("network manager stopped")
 		}
 		cmd = exec.Command("systemctl", "disable", "NetworkManager")
-		if err = cmd.Run(); err != nil {
-			fmt.Printf("warning: disable networkmanager fail: %s", err.Error())
+		if errorMessage, err = cmd.CombinedOutput(); err != nil {
+			fmt.Printf("warning: disable networkmanager fail: %s", errorMessage)
 		} else {
 			fmt.Println("network manager disabled")
 		}
@@ -214,14 +214,14 @@ func configureNetworkForCell() (err error) {
 	{
 		//restart network
 		var cmd = exec.Command("systemctl", "stop", "network")
-		if err = cmd.Run(); err != nil {
-			fmt.Printf("warning: stop network service fail: %s", err.Error())
+		if errorMessage, err = cmd.CombinedOutput(); err != nil {
+			fmt.Printf("warning: stop network service fail: %s", errorMessage)
 		} else {
 			fmt.Println("network service stopped")
 		}
 		cmd = exec.Command("systemctl", "start", "network")
-		if err = cmd.Run(); err != nil {
-			fmt.Printf("warning: start network service fail: %s", err.Error())
+		if errorMessage, err = cmd.CombinedOutput(); err != nil {
+			fmt.Printf("warning: start network service fail: %s", errorMessage)
 			return
 		} else {
 			fmt.Println("network service restarted")

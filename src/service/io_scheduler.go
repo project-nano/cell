@@ -198,31 +198,34 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 		ChunkSize      = 1 << 10
 		NotifyInterval = 1 * time.Second
 	)
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventWriteDiskCompleted, Group: group, Volume: volume}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventWriteDiskCompleted, Group: group, Volume: volume}
+	var result = SchedulerResult{ID: id}
+	defer func() {
+		if nil != err {
+			event.Error = err
+			result.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+		scheduler.resultChan <- result
+	}()
 	var url = fmt.Sprintf("%s://%s:%d%s", Protocol, host, port,
 		scheduler.apiPath(fmt.Sprintf("/%s/%s/file/", Resource, image)))
-	stat, err := os.Stat(path)
+	var stat os.FileInfo
+	stat, err = os.Stat(path)
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
 	var totalSize = int(stat.Size())
-	checkSum, err := scheduler.generateCheckSum(path)
+	var checkSum string
+	checkSum, err = scheduler.generateCheckSum(path)
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
-
-	file, err := os.Open(path)
+	var file *os.File
+	file, err = os.Open(path)
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
-
 	var processed = 0
 	var pipeFinished = make(chan bool)
 	bodyReader, bodyWriter := io.Pipe()
@@ -232,36 +235,38 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 
 	go func() {
 		defer func() {
-			if err := file.Close(); err != nil {
-				log.Printf("<scheduler-%s> close file fail: %s", scheduler.name, err.Error())
+			if ioError := file.Close(); ioError != nil {
+				log.Printf("<scheduler-%s> close file fail: %s", scheduler.name, ioError.Error())
 			}
-			if err := bodyWriter.Close(); err != nil {
-				log.Printf("<scheduler-%s> close bodywriter fail: %s", scheduler.name, err.Error())
+			if ioError := bodyWriter.Close(); ioError != nil {
+				log.Printf("<scheduler-%s> close bodywriter fail: %s", scheduler.name, ioError.Error())
 			}
 			pipeFinished <- true
 		}()
 		_ = multiWriter.WriteField(CheckSumField, checkSum)
-		filePartWriter, err := multiWriter.CreateFormFile(FieldName, image)
-		if err != nil {
-			log.Printf("<scheduler-%s> create writer field fail: %s", scheduler.name, err.Error())
+		filePartWriter, ioError := multiWriter.CreateFormFile(FieldName, image)
+		if ioError != nil {
+			log.Printf("<scheduler-%s> create writer field fail: %s", scheduler.name, ioError.Error())
 			return
 		}
-		defer multiWriter.Close()
+		defer func() {
+			_ = multiWriter.Close()
+		}()
 
 		var n int
 		var buffer = make([]byte, ChunkSize)
 
 		for {
-			n, err = file.Read(buffer)
+			n, ioError = file.Read(buffer)
 			if n > 0 {
 				filePartWriter.Write(buffer[:n])
 				processed += n
 			}
-			if err == io.EOF {
+			if ioError == io.EOF {
 				//log.Printf("<scheduler-%s> finished reading file '%s'", scheduler.name, path)
 				return
-			} else if err != nil {
-				log.Printf("<scheduler-%s> reading file fail: %s", scheduler.name, err.Error())
+			} else if ioError != nil {
+				log.Printf("<scheduler-%s> reading file fail: %s", scheduler.name, ioError.Error())
 				return
 			}
 		}
@@ -290,20 +295,22 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 		<-exitChan
 		<-pipeFinished
 	}
-	req, err := http.NewRequest(http.MethodPut, url, bodyReader)
+	var req *http.Request
+	req, err = http.NewRequest(http.MethodPut, url, bodyReader)
 	if err != nil {
 		finishRoutine()
-		scheduler.resultChan <- SchedulerResult{ID: id, Error: err}
-		return err
+		return
 	}
 	req.Header.Set("Content-Type", contentType)
-	resp, err := scheduler.client.Do(req)
+	var resp *http.Response
+	resp, err = scheduler.client.Do(req)
 	finishRoutine()
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{ID: id, Error: err}
-		return err
+		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 	type serverResponse struct {
 		ErrorCode int    `json:"error_code"`
 		Message   string `json:"message"`
@@ -311,15 +318,14 @@ func (scheduler *IOScheduler) handleWriteTask(id framework.SessionID, group, vol
 	var jsonResp serverResponse
 	var decoder = json.NewDecoder(resp.Body)
 	if err = decoder.Decode(&jsonResp); err != nil {
-		scheduler.resultChan <- SchedulerResult{ID: id, Error: err}
-		return err
+		return
 	}
 	if 0 != jsonResp.ErrorCode {
 		err = errors.New(jsonResp.Message)
-		scheduler.resultChan <- SchedulerResult{ID: id, Error: err}
-		return err
+		return
 	}
-	scheduler.resultChan <- SchedulerResult{ID: id, Size: uint(totalSize)}
+	result.Size = uint(totalSize)
+	//scheduler.resultChan <- SchedulerResult{ID: id, Size: uint(totalSize)}
 	return nil
 }
 
@@ -331,26 +337,35 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 		NotifyInterval = 1 * time.Second
 		VolumePerm     = 0666
 	)
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventReadDiskCompleted, Group: group, Volume: volume}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventReadDiskCompleted, Group: group, Volume: volume}
+	var result = SchedulerResult{ID: id}
+	defer func() {
+		if nil != err {
+			event.Error = err
+			result.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+		scheduler.resultChan <- result
+	}()
+
 	var url = fmt.Sprintf("%s://%s:%d%s", Protocol, host, port,
 		scheduler.apiPath(fmt.Sprintf("/%s/%s/file/", Resource, image)))
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, VolumePerm)
+	var file *os.File
+	file, err = os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, VolumePerm)
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
-	defer file.Close()
-
-	resp, err := scheduler.client.Get(url)
+	defer func() {
+		_ = file.Close()
+	}()
+	var resp *http.Response
+	resp, err = scheduler.client.Get(url)
 	if err != nil {
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var checkSum = resp.Header.Get("Signature")
 
@@ -380,9 +395,10 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 		for {
 			n, err = resp.Body.Read(buffer)
 			if n > 0 {
-				if n, wErr := file.Write(buffer[:n]); wErr != nil {
-					log.Printf("<scheduler-%s> write to file fail: %s", scheduler.name, wErr.Error())
-					scheduler.resultChan <- SchedulerResult{Error: wErr, ID: id}
+				var writeError error
+				if n, writeError = file.Write(buffer[:n]); writeError != nil {
+					log.Printf("<scheduler-%s> write to file fail: %s", scheduler.name, writeError.Error())
+					err = writeError
 					break
 				} else {
 					processed += n
@@ -393,112 +409,118 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 				{
 					if "" != checkSum {
 						log.Printf("<scheduler-%s> all image data received, checking integrity...", scheduler.name)
-						computed, err := scheduler.generateCheckSum(path)
+						var computed string
+						computed, err = scheduler.generateCheckSum(path)
 						if err != nil {
 							log.Printf("<scheduler-%s> generate check sum fail: %s", scheduler.name, err.Error())
-							os.Remove(path)
-							scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
+							_ = os.Remove(path)
 							break
 						}
 						if checkSum != computed {
 							err = errors.New("image corrupted")
 							log.Printf("<scheduler-%s> check integrity fail: %s", scheduler.name, err.Error())
-							scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 							break
 						}
 					}
 					//resize image
 					cmd := exec.Command("qemu-img", "resize", path, fmt.Sprintf("%d", targetSize))
-					if err = cmd.Run(); err != nil {
-						log.Printf("<scheduler-%s> resize image fail: %s", scheduler.name, err.Error())
-						os.Remove(path)
-						err = fmt.Errorf("resize image to %s fail: %s", bytesToString(targetSize), err.Error())
-						scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
+					var errorMessage []byte
+					if errorMessage, err = cmd.CombinedOutput(); err != nil {
+						log.Printf("<scheduler-%s> resize image fail: %s", scheduler.name, errorMessage)
+						_ = os.Remove(path)
+						err = fmt.Errorf("resize image to %s fail: %s", bytesToString(targetSize), errorMessage)
 						break
 					}
 					log.Printf("<scheduler-%s> image %s resized to %s", scheduler.name, path, bytesToString(targetSize))
 				}
-				scheduler.resultChan <- SchedulerResult{ID: id, Size: uint(processed)}
+				result.Size = uint(processed)
 				break
 			} else if err != nil {
 				log.Printf("<scheduler-%s> reading stream fail: %s", scheduler.name, err.Error())
-				scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
 				break
 			}
 		}
-
 	}
 	notifyChan <- true
 	<-exitChan
-
 	return nil
 }
 
 func (scheduler *IOScheduler) handleResizeTask(id framework.SessionID, group, volume, path string, size uint64) (err error) {
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventResizeDiskCompleted, Group: group, Volume: volume}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventResizeDiskCompleted, Group: group, Volume: volume}
+	var result = SchedulerResult{ID: id}
+	defer func() {
+		if nil != err {
+			event.Error = err
+			result.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+		scheduler.resultChan <- result
+	}()
+
 	var begin = time.Now()
 	var cmd = exec.Command("qemu-img", "resize", path, fmt.Sprintf("%d", size))
 	log.Printf("<scheduler-%s> try resize volume %s ...", scheduler.name, path)
-	errMessage, err := cmd.CombinedOutput()
+	var errMessage []byte
+	errMessage, err = cmd.CombinedOutput()
 	if err != nil {
-		err = errors.New(string(errMessage))
-		log.Printf("<scheduler-%s> resize volume fail: %s", scheduler.name, err.Error())
-		err = fmt.Errorf("resize volume to %s fail: %s", bytesToString(size), err.Error())
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		log.Printf("<scheduler-%s> resize volume fail: %s", scheduler.name, errMessage)
+		err = fmt.Errorf("resize volume to %s fail: %s", bytesToString(size), errMessage)
+		return
 	}
 	var elapsed = time.Now().Sub(begin).Seconds() * 1000
-	scheduler.resultChan <- SchedulerResult{ID: id}
 	log.Printf("<scheduler-%s> resize volume '%s' to %s in %.3f milliseconds",
 		scheduler.name, path, bytesToString(size), elapsed)
 	return nil
 }
 
 func (scheduler *IOScheduler) handleShrinkTask(id framework.SessionID, group, volume, path string) (err error) {
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventShrinkDiskCompleted, Group: group, Volume: volume}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventShrinkDiskCompleted, Group: group, Volume: volume}
+	var result = SchedulerResult{ID: id}
+	defer func() {
+		if nil != err {
+			event.Error = err
+			result.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+		scheduler.resultChan <- result
+	}()
+
 	var begin = time.Now()
 	var shrankPath = fmt.Sprintf("%s_shrink", path)
 	var cmd = exec.Command("qemu-img", "convert", "-f", "qcow2", "-O", "qcow2", path, shrankPath)
 	log.Printf("<scheduler-%s> try shrink volume %s ...", scheduler.name, path)
-	errMessage, err := cmd.CombinedOutput()
+	var errMessage []byte
+	errMessage, err = cmd.CombinedOutput()
 	if err != nil {
 		err = errors.New(string(errMessage))
 		log.Printf("<scheduler-%s> shrink volume fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
 	log.Printf("<scheduler-%s> shrank volume %s created", scheduler.name, shrankPath)
 	if err = os.Remove(path); err != nil {
 		log.Printf("<scheduler-%s> remove old image fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
 	if err = os.Rename(shrankPath, path); err != nil {
 		log.Printf("<scheduler-%s> rename new image fail: %s", scheduler.name, err.Error())
-		scheduler.resultChan <- SchedulerResult{Error: err, ID: id}
-		return err
+		return
 	}
 	var elapsed = time.Now().Sub(begin).Seconds() * 1000
-	scheduler.resultChan <- SchedulerResult{ID: id}
 	log.Printf("<scheduler-%s> volume '%s' shrank in %.3f milliseconds",
 		scheduler.name, path, elapsed)
 	return nil
 }
 
 func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventCreateSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventCreateSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
+	defer func() {
+		if nil != err {
+			event.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+	}()
+
 	for _, target := range targets {
 		current, backing := target.Current, target.Backing
 		if err = os.Rename(current, backing); err != nil {
@@ -516,11 +538,14 @@ func (scheduler *IOScheduler) handleCreateSnapshotTask(group, snapshot string, t
 }
 
 func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, targets []snapshotTarget, respChan chan error) (err error) {
-	defer func(e error) {
-		var event = schedulerEvent{Type: schedulerEventRestoreSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
-		event.Error = e
+	var event = schedulerEvent{Type: schedulerEventRestoreSnapshotCompleted, Group: group, Snapshot: snapshot, ErrorChan: respChan}
+	defer func() {
+		if nil != err {
+			event.Error = err
+		}
 		scheduler.eventChan <- event
-	}(err)
+	}()
+
 	for _, target := range targets {
 		current, backing := target.Current, target.Backing
 		if _, err = os.Stat(backing); os.IsNotExist(err) {
@@ -533,7 +558,6 @@ func (scheduler *IOScheduler) handleRestoreSnapshotTask(group, snapshot string, 
 		if err = backingImage(current, backing, imageFormatDefault); err != nil {
 			return err
 		}
-
 		log.Printf("<scheduler-%s> '%s' reverted to '%s'",
 			scheduler.name, current, backing)
 	}
@@ -649,17 +673,22 @@ const (
 )
 
 func backingImage(imagePath, backingPath, imageFormat string) (err error) {
-	var cmd = exec.Command(imageCommand, "create", "-f", imageFormat, "-b", backingPath, imagePath)
-	if err = cmd.Run(); err != nil {
-		return err
+	var cmd = exec.Command(imageCommand, "create", "-f", imageFormat, "-F", imageFormat,
+		"-b", backingPath, imagePath)
+	var errorMessage []byte
+	if errorMessage, err = cmd.CombinedOutput(); err != nil {
+		err = errors.New(string(errorMessage))
+		return
 	}
 	return nil
 }
 
 func commitImage(imagePath string) (err error) {
 	var cmd = exec.Command(imageCommand, "commit", imagePath)
-	if err = cmd.Run(); err != nil {
-		return err
+	var errorMessage []byte
+	if errorMessage, err = cmd.CombinedOutput(); err != nil {
+		err = fmt.Errorf("%s", errorMessage)
+		return
 	}
 	return nil
 }

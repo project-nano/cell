@@ -1962,7 +1962,9 @@ func buildCloudInitImage(initiatorIP, poolPath, guestID string) (imagePath strin
 	var imageName = fmt.Sprintf("%s_ci.iso", guestID)
 	imagePath = filepath.Join(poolPath, imageName)
 	var cmd = exec.Command("genisoimage", "-o", imagePath, "-volid", Label, "-joliet", "-rock", metaFilePath, userFilePath)
-	if err = cmd.Run(); err != nil {
+	var errorMessage []byte
+	if errorMessage, err = cmd.CombinedOutput(); err != nil {
+		err = fmt.Errorf("generate cloud init boot image fail: %s", string(errorMessage))
 		return
 	}
 	log.Printf("<storage> cloud init boot image '%s' created", imagePath)
