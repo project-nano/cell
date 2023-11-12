@@ -118,7 +118,7 @@ type virVideoDriver struct {
 
 type virVideoElement struct {
 	Model  virVideoModel  `xml:"model"`
-	Driver virVideoDriver `xml:"driver"`
+	Driver *virVideoDriver `xml:"driver,omitempty"`
 }
 
 type virDomainDevicesElement struct {
