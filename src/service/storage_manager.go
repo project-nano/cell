@@ -1170,14 +1170,7 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 		err = fmt.Errorf("volume group '%s' locked for update", groupName)
 		return
 	}
-	//if snapshotName == group.ActiveSnapshot {
-	//	err = errors.New("Not support delete active snapshot")
-	//	return
-	//}
-	//if snapshotName == group.BaseSnapshot {
-	//	err = errors.New("Not support delete root snapshot")
-	//	return
-	//}
+
 	var snapshot ManagedSnapshot
 	snapshot, exists = group.Snapshots[snapshotName]
 	if !exists {
@@ -1201,6 +1194,10 @@ func (manager *StorageManager) handleDeleteSnapshot(groupName, snapshotName stri
 				return
 			}
 		}
+	}
+	if snapshot.IsCurrent && 0 != backedCount {
+		err = fmt.Errorf("can't delete current snapshot when backed by snapshot '%s'", currentBackedSnapshot)
+		return
 	}
 	if !backedAvailable && 0 != backedCount {
 		backedAvailable = true

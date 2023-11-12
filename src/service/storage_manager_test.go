@@ -376,6 +376,125 @@ func TestStorageManager_Snapshots(t *testing.T) {
 	t.Log("test case: Snapshots passed")
 }
 
+func TestStorageManager_DeleteCurrentSnapshot(t *testing.T) {
+	//get manager for test
+	manager, err := getStorageManagerForTest()
+	if err != nil {
+		t.Fatalf("get storage manager failed: %s", err.Error())
+	}
+	defer func() {
+		_ = manager.Stop()
+	}()
+	// create 5G system volume
+	const (
+		volumeName = "test_volume"
+		gib        = 1 << 30
+	)
+	var system uint64 = 5 * gib
+	var data = make([]uint64, 0)
+	{
+		respChan := make(chan StorageResult, 1)
+		manager.CreateVolumes(volumeName, system, data, BootTypeNone, respChan)
+		var resp = <-respChan
+		if resp.Error != nil {
+			t.Fatalf("create volume failed: %s", resp.Error.Error())
+		}
+	}
+	// defer resource cleaner
+	defer func() {
+		respChan := make(chan error, 1)
+		manager.DeleteVolumes(volumeName, respChan)
+		err = <-respChan
+		if err != nil {
+			t.Logf("warning: delete volume %s failed: %s", volumeName, err.Error())
+		}
+	}()
+	// create snapshot
+	const (
+		s0    = "1"
+		s1    = "2"
+		s2    = "3"
+		s3    = "4"
+		sBeta = "beta"
+	)
+	{
+		// serial: s0 -> s1 -> s2 -> s3
+		serial := []string{s0, s1, s2, s3}
+		respChan := make(chan error, 1)
+		for _, name := range serial {
+			manager.CreateSnapshot(volumeName, name, name, respChan)
+			err = <-respChan
+			if err != nil {
+				t.Fatalf("create snapshot %s failed: %s", name, err.Error())
+			}
+			t.Logf("snapshot %s created", name)
+		}
+	}
+	{
+		// revert to s1
+		var target = s1
+		respChan := make(chan error, 1)
+		manager.RestoreSnapshot(volumeName, target, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("restore snapshot %s failed: %s", target, err.Error())
+		}
+		t.Logf("snapshot %s restored", target)
+		// s0 -> si(current) -> s2 -> s3
+	}
+	{
+		//try delete s1, must be fail
+		var target = s1
+		respChan := make(chan error, 1)
+		manager.DeleteSnapshot(volumeName, target, respChan)
+		if err = <-respChan; err == nil {
+			t.Fatalf("delete snapshot %s should fail", target)
+		}
+		t.Logf("delete snapshot %s failed as expected: %s", target, err.Error())
+	}
+	{
+		//create beta at current
+		var target = sBeta
+		respChan := make(chan error, 1)
+		manager.CreateSnapshot(volumeName, target, target, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("create snapshot %s failed: %s", target, err.Error())
+		}
+		t.Logf("snapshot %s created", target)
+	}
+	{
+		// revert to s3
+		var target = s3
+		respChan := make(chan error, 1)
+		manager.RestoreSnapshot(volumeName, target, respChan)
+		if err = <-respChan; err != nil {
+			t.Fatalf("restore snapshot %s failed: %s", target, err.Error())
+		}
+		t.Logf("snapshot %s restored", target)
+	}
+	{
+		// delete sbeta, s1, s2, s3, s0
+		batches := []string{
+			sBeta,
+			s1,
+			s2,
+			s3,
+			s0,
+		}
+		respChan := make(chan error, 1)
+		for _, snapshotName := range batches {
+			manager.DeleteSnapshot(volumeName, snapshotName, respChan)
+			err = <-respChan
+			if nil != err {
+				t.Fatalf("delete snapshot %s failed: %s", snapshotName, err.Error())
+			} else {
+				t.Logf("delete snapshot %s success", snapshotName)
+			}
+		}
+
+	}
+	t.Log("test case: DeleteCurrentSnapshot passed")
+}
+
 type logPrint func(format string, v ...interface{})
 
 func dumpSnapshots(snapshots []SnapshotConfig, log logPrint) {

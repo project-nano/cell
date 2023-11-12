@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/libvirt/libvirt-go"
+	"log"
 	"strings"
 )
 
@@ -391,6 +392,7 @@ func (util *InstanceUtility) CreateInstance(config GuestConfig) (guest GuestConf
 	}
 	virDomain, err = util.virConnect.DomainDefineXML(string(xmlData))
 	if err != nil {
+		log.Printf("debug: failed domain define\n%s\n", string(xmlData))
 		err = fmt.Errorf("create domain for instance '%s' fail: %s", config.Name, err.Error())
 		return
 	}
@@ -527,8 +529,6 @@ func (util *InstanceUtility) GetInstanceStatus(id string) (ins InstanceStatus, e
 			} else {
 				ins.AvailableMemory = 0
 			}
-			//log.Printf("debug: max %d, rss %d, avail %d", maxMemory, rssValue, ins.AvailableMemory)
-			//log.Println("<instance> warning: available memory stats not supported, using (max - rss) instead")
 		} else {
 			return ins, errors.New("available or rss memory stats not supported")
 		}
