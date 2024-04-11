@@ -2,9 +2,27 @@
 
 ## [1.4.0] - 2023-10-13
 
+### 新增
+
+- StorageManager增加测试用例
+- 配置文件"data/instance.data"新增选项max_guest设置当前节点允许承载的最大云主机数量，默认值100
+- 配置文件"domain.cfg"新增选项timeout，设置操作超时时间，单位为秒，默认值10
+
+### 变更
+
+- 云主机存在快照时，拒绝创建磁盘镜像
+- 允许删除根快照和活动快照
+- 启动时同步网络资源
+- 启动时校验存储卷
+- 磁盘卷锁定时拒绝启动云主机
+
+### 修正
+
+- 删除快照失败导致模块崩溃
+
 ### Added
 
-- Add testcases for storage manager
+- Add test cases for storage manager
 - Add option 'max_guest' to configure file "data/instance.data", default value is 100
 - Add option 'timeout' to configure file "domain.cfg", default value is 10 seconds
 
@@ -34,7 +52,7 @@
 - Allocate instance address using Cloud-Init
 - Manage security policy of instance
 - Create instances with security policy
- 
+
 ### Changed
 
 - Return an explicit error when resize disk fail after creating a new image
@@ -257,11 +275,11 @@
 - Fixed: Internal instance address not send to Core module
 
 ## [0.1.3] - 2018-7-19
-   
+
 ### modified
-   
+
 - fix instance MAC not properly generated
- 
+
 
 ## [0.1.2] - 2018-7-18
 
