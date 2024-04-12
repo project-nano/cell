@@ -1228,71 +1228,72 @@ func (util *InstanceUtility) createDefine(config GuestConfig) (define virDomainD
 	//<feature name='monitor' policy='disable'/>
 	//<topology sockets='1' cores='1' threads='1'/>
 	//</cpu>
-	define.CPU.Mode = cpuModeCustom
-	define.CPU.Match = cpuMatchMinimum
-	define.CPU.Check = cpuCheckPartial
-	define.CPU.Model = []virDomainCpuModel{
-		{
-			Model:    modelDefault,
-			Fallback: modelFallbackAllow,
-		},
-	}
-	{
-		//CPU features
-		var forced = []string{
-			"acpi",
-			"apic",
-			"pae",
-		}
-		var disabled = []string{
-			cpuFeatureMonitor,
-			"hle",
-			"rtm",
-		}
-		var preferedIntel = []string{
-			"pcid",
-			"spec-ctrl",
-			"stibp",
-			"ssbd",
-			"pdpe1gb",
-			"md-clear",
-		}
-		var preferedAMD = []string{
-			"ibpb",
-			"stibp",
-			"virt-ssbd",
-			"pdpe1gb",
-		}
-		//merge optional features
-		// feature => true
-		var prefered = map[string]bool{}
-		for _, feature := range preferedIntel {
-			prefered[feature] = true
-		}
-		for _, feature := range preferedAMD {
-			prefered[feature] = true
-		}
-		var features = make([]virDomainCpuFeature, 0)
-		for _, feature := range forced {
-			features = append(features, virDomainCpuFeature{
-				Name:   feature,
-				Policy: cpuFeaturePolicyForce,
-			})
-		}
-		for _, feature := range disabled {
-			features = append(features, virDomainCpuFeature{
-				Name:   feature,
-				Policy: cpuFeaturePolicyDisable,
-			})
-		}
-		for feature := range prefered {
-			features = append(features, virDomainCpuFeature{
-				Name:   feature,
-				Policy: cpuFeaturePolicyOptional,
-			})
-		}
-		define.CPU.Features = features
-	}
+	
+	// define.CPU.Mode = cpuModeCustom
+	// define.CPU.Match = cpuMatchMinimum
+	// define.CPU.Check = cpuCheckPartial
+	// define.CPU.Model = []virDomainCpuModel{
+	// 	{
+	// 		Model:    modelDefault,
+	// 		Fallback: modelFallbackAllow,
+	// 	},
+	// }
+	// {
+	// 	//CPU features
+	// 	var forced = []string{
+	// 		"acpi",
+	// 		"apic",
+	// 		"pae",
+	// 	}
+	// 	var disabled = []string{
+	// 		cpuFeatureMonitor,
+	// 		"hle",
+	// 		"rtm",
+	// 	}
+	// 	var preferedIntel = []string{
+	// 		"pcid",
+	// 		"spec-ctrl",
+	// 		"stibp",
+	// 		"ssbd",
+	// 		"pdpe1gb",
+	// 		"md-clear",
+	// 	}
+	// 	var preferedAMD = []string{
+	// 		"ibpb",
+	// 		"stibp",
+	// 		"virt-ssbd",
+	// 		"pdpe1gb",
+	// 	}
+	// 	//merge optional features
+	// 	// feature => true
+	// 	var prefered = map[string]bool{}
+	// 	for _, feature := range preferedIntel {
+	// 		prefered[feature] = true
+	// 	}
+	// 	for _, feature := range preferedAMD {
+	// 		prefered[feature] = true
+	// 	}
+	// 	var features = make([]virDomainCpuFeature, 0)
+	// 	for _, feature := range forced {
+	// 		features = append(features, virDomainCpuFeature{
+	// 			Name:   feature,
+	// 			Policy: cpuFeaturePolicyForce,
+	// 		})
+	// 	}
+	// 	for _, feature := range disabled {
+	// 		features = append(features, virDomainCpuFeature{
+	// 			Name:   feature,
+	// 			Policy: cpuFeaturePolicyDisable,
+	// 		})
+	// 	}
+	// 	for feature := range prefered {
+	// 		features = append(features, virDomainCpuFeature{
+	// 			Name:   feature,
+	// 			Policy: cpuFeaturePolicyOptional,
+	// 		})
+	// 	}
+	// 	define.CPU.Features = features
+	// }
 
 	//cpu
 	if err = setCPUPriority(&define, config.CPUPriority); err != nil {
