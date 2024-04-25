@@ -19,6 +19,7 @@
 ### 修正
 
 - 删除快照失败导致模块崩溃
+- 缺少参数导致缩小卷失败
 
 ### Added
 
@@ -38,6 +39,7 @@
 ### Fixed
 
 - crash when delete snapshot failed
+- shrink volume fail when parameter omitted
 
 ## [1.3.1] - 2021-02-19
 

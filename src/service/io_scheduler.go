@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/project-nano/framework"
 	"io"
 	"log"
 	"math"
@@ -16,6 +15,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/project-nano/framework"
 )
 
 type SchedulerResult struct {
@@ -423,7 +424,13 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 						}
 					}
 					//resize image
-					cmd := exec.Command("qemu-img", "resize", path, fmt.Sprintf("%d", targetSize))
+					var parameters = []string{
+						"resize",
+						"--shrink",
+						path,
+						fmt.Sprintf("%d", targetSize),
+					}
+					cmd := exec.Command("qemu-img", parameters...)
 					var errorMessage []byte
 					if errorMessage, err = cmd.CombinedOutput(); err != nil {
 						log.Printf("<scheduler-%s> resize image fail: %s", scheduler.name, errorMessage)
