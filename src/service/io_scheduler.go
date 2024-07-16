@@ -426,7 +426,6 @@ func (scheduler *IOScheduler) handleReadTask(id framework.SessionID, group, volu
 					//resize image
 					var parameters = []string{
 						"resize",
-						"--shrink",
 						path,
 						fmt.Sprintf("%d", targetSize),
 					}
